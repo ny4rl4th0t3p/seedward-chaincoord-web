@@ -85,7 +85,10 @@ export async function getJwt(keypair: TestKeypair, prefix: string): Promise<stri
   const { challenge } = (await challengeRes.json()) as { challenge: string };
 
   const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const payload = JSON.stringify({ challenge, operator_address: address, timestamp });
+  const nonce = randomUUID();
+  // The nonce is part of the signed bytes (replay protection) and MUST equal the nonce sent to
+  // /auth/verify — matches buildAuthPayload (utils/auth.ts) + auth_contract_test.go on the server.
+  const payload = JSON.stringify({ challenge, nonce, operator_address: address, timestamp });
   const stdSig = await keypair.signArbitrary('cosmoshub-4', address, payload);
 
   const verifyRes = await fetch(`${base}/auth/verify`, {
@@ -95,7 +98,7 @@ export async function getJwt(keypair: TestKeypair, prefix: string): Promise<stri
       operator_address: address,
       pubkey_b64: stdSig.pub_key.value,
       challenge,
-      nonce: randomUUID(),
+      nonce,
       timestamp,
       signature: stdSig.signature,
     }),

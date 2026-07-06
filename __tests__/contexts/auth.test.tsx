@@ -170,8 +170,8 @@ describe('AuthProvider / useAuth', () => {
 
     const [, , payloadArg] = cosmosWallet.signArbitrary.mock.calls[0];
     const parsed = JSON.parse(payloadArg);
-    // Must contain exactly these three keys in alphabetical order
-    expect(Object.keys(parsed)).toEqual(['challenge', 'operator_address', 'timestamp']);
+    // Alphabetical keys — nonce is kept in the signed payload (bound to the signature, replay protection).
+    expect(Object.keys(parsed)).toEqual(['challenge', 'nonce', 'operator_address', 'timestamp']);
     expect(parsed.challenge).toBe(CHALLENGE);
     expect(parsed.operator_address).toBe(ADDRESS);
   });
@@ -180,7 +180,7 @@ describe('AuthProvider / useAuth', () => {
     global.fetch = jest.fn().mockResolvedValueOnce({
       ok: false,
       status: 429,
-      json: async () => ({ message: 'rate limited' }),
+      json: async () => ({ error: { message: 'rate limited' } }),
     } as Response);
     const wallet = makeMockWallet();
     let auth!: ReturnType<typeof useAuth>;
@@ -203,7 +203,7 @@ describe('AuthProvider / useAuth', () => {
       .mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: async () => ({ message: 'signature verification failed' }),
+        json: async () => ({ error: { message: 'signature verification failed' } }),
       } as Response);
     const wallet = makeMockWallet();
     let auth!: ReturnType<typeof useAuth>;

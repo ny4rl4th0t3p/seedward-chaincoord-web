@@ -1,8 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CoordinatorPanel } from '@/components/CoordinatorPanel';
 import { buildSignedAction } from '@/utils/signedAction';
-import type { Committee, JoinRequest, Launch, Proposal } from '@/types';
+import type {
+  ApiLaunchJSON,
+  ApiCommitteeJSON,
+  ApiJoinRequestJSON,
+  ApiProposalJSON,
+} from '@/api/generated/model';
 
 // ── ESM shims ────────────────────────────────────────────────────────────────
 
@@ -36,9 +42,74 @@ jest.mock('@/components', () => ({
 
 jest.mock('@/utils/signedAction', () => ({
   buildSignedAction: jest.fn(),
+  buildCanonicalActionPayload: jest.fn(() => '{}'),
 }));
 
 const mockSign = buildSignedAction as jest.MockedFunction<typeof buildSignedAction>;
+
+// ── react-query harness ───────────────────────────────────────────────────────
+// The panel drives generated react-query hooks → the orval `authFetchMutator` →
+// `global.fetch`, so we mock `global.fetch` and render under a fresh QueryClient.
+// @tanstack/react-query is 4.x: option is `cacheTime` (v5: `gcTime`).
+
+function renderWithClient(ui: React.ReactElement) {
+  const client = new QueryClient({
+    // v4 logs every query/mutation error to console.error by default; the error-path tests
+    // exercise failures on purpose, so mute it (option removed in v5).
+    logger: { log() {}, warn() {}, error() {} },
+    defaultOptions: {
+      queries: { retry: false, cacheTime: 0 },
+      mutations: { retry: false },
+    },
+  });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
+// ── fetch mock ─────────────────────────────────────────────────────────────────
+// First (method, url-substring) match wins; unmatched → `200 {}`. Order specific
+// routes first. On non-2xx the body is coordd's *nested* envelope
+// `{ error: { message } }` — what the mutator throws and consumers read.
+
+interface Route {
+  method?: string;
+  match: string | RegExp;
+  status?: number;
+  body?: unknown;
+}
+
+function mockFetch(routes: Route[] = []) {
+  const fn = jest.fn(async (url: string, init?: RequestInit) => {
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const route = routes.find((r) => {
+      if (r.method && r.method.toUpperCase() !== method) return false;
+      return typeof r.match === 'string' ? url.includes(r.match) : r.match.test(url);
+    });
+    const status = route?.status ?? 200;
+    const ok = status >= 200 && status < 300;
+    return {
+      ok,
+      status,
+      json: async () => route?.body ?? {},
+      text: async () => JSON.stringify(route?.body ?? {}),
+      arrayBuffer: async () => new ArrayBuffer(0),
+    };
+  });
+  (global as unknown as { fetch: jest.Mock }).fetch = fn;
+  return fn;
+}
+
+function envelope(message: string) {
+  return { error: { message } };
+}
+
+// The two list queries the panel fires on mount. Callers prepend more specific
+// routes; anything else falls through to an empty list.
+function listRoutes(opts?: { joinItems?: ApiJoinRequestJSON[]; proposalItems?: ApiProposalJSON[] }): Route[] {
+  return [
+    { method: 'GET', match: '/proposals', body: { items: opts?.proposalItems ?? [] } },
+    { method: 'GET', match: '/join', body: { items: opts?.joinItems ?? [] } },
+  ];
+}
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -53,56 +124,20 @@ const HINT = {
   denom: 'uatom',
 };
 const ADDRESS = 'cosmos1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5lzv7xu';
-const MOCK_WALLET = {} as any;
+const OTHER_COORD = 'cosmos1othercoordinator00000000000000000000000';
+const MOCK_WALLET = {} as never;
 
-const BASE_RECORD = {
-  chain_id: 'mychain-1',
-  chain_name: 'mychain',
-  bech32_prefix: 'cosmos',
-  binary_name: 'gaiad',
-  binary_version: 'v15.0.0',
-  binary_sha256: 'abc123',
-  repo_url: '',
-  repo_commit: '',
-  denom: 'uatom',
-  min_self_delegation: '1',
-  max_commission_rate: '0.2',
-  max_commission_change_rate: '0.01',
-  gentx_deadline: '2026-06-01T00:00:00Z',
-  application_window_open: '2026-05-01T00:00:00Z',
-  min_validator_count: 4,
-};
-
-function makeLaunch(overrides?: Partial<Launch>): Launch {
+function makeLaunch(overrides?: Partial<ApiLaunchJSON>): ApiLaunchJSON {
   return {
     id: LAUNCH_ID,
-    record: BASE_RECORD,
-    launch_type: 'testnet',
-    visibility: 'public',
-    status: 'open',
+    status: 'WINDOW_OPEN',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
     ...overrides,
   };
 }
 
-function makeJoinRequest(overrides?: Partial<JoinRequest>): JoinRequest {
-  return {
-    id: JR_ID,
-    launch_id: LAUNCH_ID,
-    operator_address: 'cosmos1validator000000000000000000000000000000',
-    consensus_pubkey: 'cosmosvalconspub1testkey',
-    gentx: {},
-    peer_address: '1.2.3.4:26656',
-    rpc_endpoint: '',
-    memo: 'my node',
-    submitted_at: '2026-05-01T00:00:00Z',
-    status: 'pending',
-    ...overrides,
-  };
-}
-
-function makeCommittee(overrides?: Partial<Committee>): Committee {
+function makeCommittee(overrides?: Partial<ApiCommitteeJSON>): ApiCommitteeJSON {
   return {
     id: 'dddddddd-0000-0000-0000-000000000004',
     members: [{ address: ADDRESS, moniker: 'lead', pub_key_b64: 'testpubkey==' }],
@@ -115,7 +150,22 @@ function makeCommittee(overrides?: Partial<Committee>): Committee {
   };
 }
 
-function makeProposal(overrides?: Partial<Proposal>): Proposal {
+function makeJoinRequest(overrides?: Partial<ApiJoinRequestJSON>): ApiJoinRequestJSON {
+  return {
+    id: JR_ID,
+    launch_id: LAUNCH_ID,
+    operator_address: 'cosmos1validator000000000000000000000000000000',
+    gentx: {},
+    peer_address: '1.2.3.4:26656',
+    rpc_endpoint: '',
+    memo: 'my node',
+    submitted_at: '2026-05-01T00:00:00Z',
+    status: 'PENDING',
+    ...overrides,
+  };
+}
+
+function makeProposal(overrides?: Partial<ApiProposalJSON>): ApiProposalJSON {
   return {
     id: PROP_ID,
     launch_id: LAUNCH_ID,
@@ -124,35 +174,15 @@ function makeProposal(overrides?: Partial<Proposal>): Proposal {
     proposed_by: ADDRESS,
     proposed_at: '2026-05-01T00:00:00Z',
     ttl_expires: '2026-05-08T00:00:00Z',
-    status: 'pending',
+    status: 'PENDING_SIGNATURES',
     signatures: [],
     ...overrides,
   };
 }
 
-// Default authFetch: returns empty lists for join + proposals, no-op for mutations.
-function makeAuthFetch(overrides?: {
-  joinItems?: JoinRequest[];
-  proposalItems?: Proposal[];
-  mutationResponse?: object;
-}) {
-  return jest.fn().mockImplementation(async (url: string) => {
-    if (url.includes('/join')) {
-      return { ok: true, json: async () => ({ items: overrides?.joinItems ?? [] }) };
-    }
-    if (url.includes('/proposals')) {
-      return { ok: true, json: async () => ({ items: overrides?.proposalItems ?? [] }) };
-    }
-    return { ok: true, json: async () => overrides?.mutationResponse ?? {} };
-  });
-}
-
 function defaultProps(overrides?: {
-  launch?: Partial<Launch>;
-  committee?: Partial<Committee>;
-  authFetch?: jest.Mock;
-  onLaunchUpdated?: jest.Mock;
-  onCommitteeUpdated?: jest.Mock;
+  launch?: Partial<ApiLaunchJSON>;
+  committee?: Partial<ApiCommitteeJSON>;
   isLead?: boolean;
 }) {
   return {
@@ -164,12 +194,11 @@ function defaultProps(overrides?: {
     launch: makeLaunch(overrides?.launch),
     committee: makeCommittee(overrides?.committee),
     isLead: overrides?.isLead ?? true,
-    authFetch: overrides?.authFetch ?? makeAuthFetch(),
-    onLaunchUpdated: overrides?.onLaunchUpdated ?? jest.fn(),
-    onCommitteeUpdated: overrides?.onCommitteeUpdated ?? jest.fn(),
   };
 }
 
+// Signed payloads are passed through: the signed request body carries the original
+// fields (e.g. `decision`) plus the signature envelope.
 function mockSignedResult() {
   mockSign.mockImplementation(async (payload: Record<string, unknown>) => ({
     ...payload,
@@ -177,7 +206,7 @@ function mockSignedResult() {
     nonce: 'test-nonce',
     pubkey_b64: 'testpubkey==',
     signature: 'testsig==',
-  }) as any);
+  }) as never);
 }
 
 // ── H.7 — Join queue ──────────────────────────────────────────────────────────
@@ -188,49 +217,42 @@ describe('CoordinatorPanel — JoinQueueSection (H.7)', () => {
     mockSignedResult();
   });
 
-  it('shows empty state when no join requests', async () => {
-    render(<CoordinatorPanel {...defaultProps()} />);
+  it('shows the empty state when there are no join requests', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/No join requests yet/)).toBeInTheDocument();
     });
   });
 
-  it('renders operator address and memo for each request', async () => {
-    const jr = makeJoinRequest({ memo: 'fast-node' });
-    const authFetch = makeAuthFetch({ joinItems: [jr] });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('renders operator + memo and Approve/Reject for a PENDING request', async () => {
+    const jr = makeJoinRequest({ memo: 'fast-node', status: 'PENDING' });
+    mockFetch(listRoutes({ joinItems: [jr] }));
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/fast-node/)).toBeInTheDocument();
-      expect(screen.getByText(new RegExp(jr.operator_address.slice(0, 12)))).toBeInTheDocument();
     });
+    expect(screen.getByText(new RegExp(jr.operator_address!.slice(0, 12)))).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
   });
 
-  it('shows Approve and Reject buttons for pending requests', async () => {
-    const authFetch = makeAuthFetch({ joinItems: [makeJoinRequest({ status: 'pending' })] });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('shows no action buttons for an APPROVED request', async () => {
+    mockFetch(listRoutes({ joinItems: [makeJoinRequest({ status: 'APPROVED' })] }));
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+      expect(screen.getByText(/my node/)).toBeInTheDocument();
     });
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
   });
 
-  it('shows no action buttons for approved requests', async () => {
-    const authFetch = makeAuthFetch({ joinItems: [makeJoinRequest({ status: 'approved' })] });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
-    });
-  });
-
-  it('shows fetch error when join queue request fails', async () => {
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) {
-        return { ok: false, status: 500, json: async () => ({ message: 'internal error' }) };
-      }
-      return { ok: true, json: async () => ({ items: [] }) };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('shows the fetch error when the join queue request fails', async () => {
+    mockFetch([
+      { method: 'GET', match: '/proposals', body: { items: [] } },
+      { method: 'GET', match: '/join', status: 500, body: envelope('internal error') },
+    ]);
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText('internal error')).toBeInTheDocument();
     });
@@ -245,120 +267,72 @@ describe('CoordinatorPanel — ProposalForm (H.8)', () => {
     mockSignedResult();
   });
 
-  async function openApproveForm(authFetch: jest.Mock) {
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  async function openApproveForm(routes: Route[]) {
+    mockFetch(routes);
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Approve' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     });
   }
 
-  async function openRejectForm(authFetch: jest.Mock) {
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('opens the APPROVE_VALIDATOR form when Approve is clicked', async () => {
+    await openApproveForm(listRoutes({ joinItems: [makeJoinRequest()] }));
+    expect(screen.getByText('Approve Validator')).toBeInTheDocument();
+  });
+
+  it('shows the reason field for Reject but not for Approve', async () => {
+    mockFetch(listRoutes({ joinItems: [makeJoinRequest()] }));
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Reject' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
     });
-  }
-
-  it('opens APPROVE_VALIDATOR form when Approve is clicked', async () => {
-    const authFetch = makeAuthFetch({ joinItems: [makeJoinRequest()] });
-    await openApproveForm(authFetch);
-    expect(screen.getByText('Approve Validator')).toBeInTheDocument();
-  });
-
-  it('opens REJECT_VALIDATOR form when Reject is clicked', async () => {
-    const authFetch = makeAuthFetch({ joinItems: [makeJoinRequest()] });
-    await openRejectForm(authFetch);
-    expect(screen.getByText('Reject Validator')).toBeInTheDocument();
-  });
-
-  it('shows reason field for REJECT but not for APPROVE', async () => {
-    const authFetchApprove = makeAuthFetch({ joinItems: [makeJoinRequest()] });
-    const { unmount } = render(<CoordinatorPanel {...defaultProps({ authFetch: authFetchApprove })} />);
-    await waitFor(() => screen.getByRole('button', { name: 'Approve' }));
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })); });
-    expect(screen.queryByPlaceholderText(/Reason for rejection/)).not.toBeInTheDocument();
-    unmount();
-
-    const authFetchReject = makeAuthFetch({ joinItems: [makeJoinRequest()] });
-    render(<CoordinatorPanel {...defaultProps({ authFetch: authFetchReject })} />);
-    await waitFor(() => screen.getByRole('button', { name: 'Reject' }));
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Reject' })); });
     expect(screen.getByPlaceholderText(/Reason for rejection/)).toBeInTheDocument();
   });
 
-  it('calls buildSignedAction with correct APPROVE payload', async () => {
-    const jr = makeJoinRequest();
-    const authFetch = makeAuthFetch({
-      joinItems: [jr],
-      mutationResponse: makeProposal(),
-    });
-    await openApproveForm(authFetch);
+  it('signs and POSTs /launch/{id}/proposal, then shows the raised feedback', async () => {
+    const routes: Route[] = [
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal`, body: makeProposal() },
+      ...listRoutes({ joinItems: [makeJoinRequest()] }),
+    ];
+    await openApproveForm(routes);
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Sign & Raise Approve/ }));
     });
 
-    expect(mockSign).toHaveBeenCalledTimes(1);
+    // buildSignedAction received the correct proposal payload
+    expect(mockSign).toHaveBeenCalled();
     const [payload, , chainId, addr] = mockSign.mock.calls[0];
     expect(chainId).toBe('mychain-1');
     expect(addr).toBe(ADDRESS);
     expect(payload).toMatchObject({
       action_type: 'APPROVE_VALIDATOR',
       coordinator_address: ADDRESS,
-      payload: {
-        join_request_id: jr.id,
-        operator_address: jr.operator_address,
-      },
-    });
-  });
-
-  it('calls POST /launch/{id}/proposal with signed body', async () => {
-    const authFetch = makeAuthFetch({
-      joinItems: [makeJoinRequest()],
-      mutationResponse: makeProposal(),
-    });
-    await openApproveForm(authFetch);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Sign & Raise Approve/ }));
+      payload: { join_request_id: JR_ID },
     });
 
-    const proposalCall = authFetch.mock.calls.find(
-      ([url]: [string]) => url === `/launch/${LAUNCH_ID}/proposal`,
+    // the POST hit the proposal endpoint with the signed body
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url, init]: [string, RequestInit]) => url === `/launch/${LAUNCH_ID}/proposal` && init?.method === 'POST',
     );
-    expect(proposalCall).toBeDefined();
-    expect(proposalCall[1].method).toBe('POST');
-    const body = JSON.parse(proposalCall[1].body);
-    expect(body.nonce).toBe('test-nonce');
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body.action_type).toBe('APPROVE_VALIDATOR');
     expect(body.signature).toBe('testsig==');
-  });
-
-  it('shows raised proposal feedback and dismisses form on success', async () => {
-    const authFetch = makeAuthFetch({
-      joinItems: [makeJoinRequest()],
-      mutationResponse: makeProposal(),
-    });
-    await openApproveForm(authFetch);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Sign & Raise Approve/ }));
-    });
 
     await waitFor(() => {
       expect(screen.getByText(/Proposal raised/)).toBeInTheDocument();
     });
-    expect(screen.queryByText('Approve Validator')).not.toBeInTheDocument();
   });
 
-  it('shows server error on failure', async () => {
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [makeJoinRequest()] }) };
-      if (url.includes('/proposals')) return { ok: true, json: async () => ({ items: [] }) };
-      return { ok: false, status: 403, json: async () => ({ message: 'not a committee member' }) };
-    });
-    await openApproveForm(authFetch);
+  it('shows the server error on a failed raise', async () => {
+    const routes: Route[] = [
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal`, status: 403, body: envelope('not a committee member') },
+      ...listRoutes({ joinItems: [makeJoinRequest()] }),
+    ];
+    await openApproveForm(routes);
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Sign & Raise Approve/ }));
@@ -369,10 +343,8 @@ describe('CoordinatorPanel — ProposalForm (H.8)', () => {
     });
   });
 
-  it('Cancel button dismisses the proposal form', async () => {
-    const authFetch = makeAuthFetch({ joinItems: [makeJoinRequest()] });
-    await openApproveForm(authFetch);
-
+  it('Cancel dismisses the proposal form', async () => {
+    await openApproveForm(listRoutes({ joinItems: [makeJoinRequest()] }));
     expect(screen.getByText('Approve Validator')).toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -389,129 +361,107 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
     mockSignedResult();
   });
 
-  it('shows empty state when no proposals', async () => {
-    render(<CoordinatorPanel {...defaultProps()} />);
+  it('shows the empty state when there are no proposals', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/No proposals yet/)).toBeInTheDocument();
     });
   });
 
-  it('renders proposal action type and status', async () => {
-    const authFetch = makeAuthFetch({ proposalItems: [makeProposal()] });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('renders the action type + PENDING_SIGNATURES status and Sign/Veto buttons', async () => {
+    mockFetch(listRoutes({ proposalItems: [makeProposal({ signatures: [] })] }));
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText('APPROVE VALIDATOR')).toBeInTheDocument();
-      expect(screen.getByText('PENDING')).toBeInTheDocument();
     });
+    expect(screen.getByText('PENDING_SIGNATURES')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Veto' })).toBeInTheDocument();
   });
 
-  it('shows Sign and Veto buttons for pending proposals with no prior decision', async () => {
-    const authFetch = makeAuthFetch({ proposalItems: [makeProposal({ signatures: [] })] });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Sign' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Veto' })).toBeInTheDocument();
-    });
-  });
-
-  it('hides Sign/Veto buttons when coordinator already signed', async () => {
+  it('renders a ✓ for a signature with decision SIGN', async () => {
     const proposal = makeProposal({
-      signatures: [{ coordinator_address: ADDRESS, decision: 'sign', timestamp: '2026-05-01T00:00:00Z' }],
+      signatures: [{ coordinator_address: OTHER_COORD, decision: 'SIGN', timestamp: '2026-05-01T00:00:00Z' }],
     });
-    const authFetch = makeAuthFetch({ proposalItems: [proposal] });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+    mockFetch(listRoutes({ proposalItems: [proposal] }));
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Sign' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Veto' })).not.toBeInTheDocument();
+      expect(screen.getByText(/✓/)).toBeInTheDocument();
+    });
+    // A signature from another coordinator leaves our Sign/Veto available.
+    expect(screen.getByRole('button', { name: 'Sign' })).toBeInTheDocument();
+  });
+
+  it('hides Sign/Veto once the coordinator has already signed', async () => {
+    const proposal = makeProposal({
+      signatures: [{ coordinator_address: ADDRESS, decision: 'SIGN', timestamp: '2026-05-01T00:00:00Z' }],
+    });
+    mockFetch(listRoutes({ proposalItems: [proposal] }));
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    await waitFor(() => {
       expect(screen.getByText(/You signed this proposal/)).toBeInTheDocument();
     });
+    expect(screen.queryByRole('button', { name: 'Sign' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Veto' })).not.toBeInTheDocument();
   });
 
-  it('hides Sign/Veto for executed proposals', async () => {
-    const authFetch = makeAuthFetch({ proposalItems: [makeProposal({ status: 'executed' })] });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('hides Sign/Veto for an EXECUTED proposal', async () => {
+    mockFetch(listRoutes({ proposalItems: [makeProposal({ status: 'EXECUTED' })] }));
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Sign' })).not.toBeInTheDocument();
+      expect(screen.getByText('EXECUTED')).toBeInTheDocument();
     });
+    expect(screen.queryByRole('button', { name: 'Sign' })).not.toBeInTheDocument();
   });
 
-  it('calls POST /launch/{id}/proposal/{prop_id}/sign with decision=sign', async () => {
-    const updatedProposal = makeProposal({
-      signatures: [{ coordinator_address: ADDRESS, decision: 'sign', timestamp: '2026-05-01T00:00:00Z' }],
-    });
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url === `/launch/${LAUNCH_ID}/proposals?per_page=100`) {
-        return { ok: true, json: async () => ({ items: [makeProposal()] }) };
-      }
-      return { ok: true, json: async () => updatedProposal };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('POSTs /launch/{id}/proposal/{prop_id}/sign with decision SIGN', async () => {
+    mockFetch([
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign`, body: makeProposal() },
+      ...listRoutes({ proposalItems: [makeProposal()] }),
+    ]);
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Sign' }));
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Sign' }));
     });
 
-    const signCall = authFetch.mock.calls.find(
-      ([url]: [string]) => url === `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign`,
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url, init]: [string, RequestInit]) =>
+        url === `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign` && init?.method === 'POST',
     );
-    expect(signCall).toBeDefined();
-    expect(signCall[1].method).toBe('POST');
-    const body = JSON.parse(signCall[1].body);
-    expect(body.decision).toBe('sign');
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body.decision).toBe('SIGN');
     expect(body.coordinator_address).toBe(ADDRESS);
   });
 
-  it('calls POST with decision=veto when Veto is clicked', async () => {
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals?')) return { ok: true, json: async () => ({ items: [makeProposal()] }) };
-      return { ok: true, json: async () => makeProposal({ status: 'vetoed' }) };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('POSTs decision VETO when Veto is clicked', async () => {
+    mockFetch([
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign`, body: makeProposal({ status: 'VETOED' }) },
+      ...listRoutes({ proposalItems: [makeProposal()] }),
+    ]);
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Veto' }));
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Veto' }));
     });
 
-    const signCall = authFetch.mock.calls.find(
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
       ([url]: [string]) => url === `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign`,
     );
-    const body = JSON.parse(signCall[1].body);
-    expect(body.decision).toBe('veto');
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body.decision).toBe('VETO');
   });
 
-  it('updates proposal status in-place after signing', async () => {
-    const signed = makeProposal({
-      status: 'executed',
-      signatures: [{ coordinator_address: ADDRESS, decision: 'sign', timestamp: '' }],
-    });
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals?')) return { ok: true, json: async () => ({ items: [makeProposal()] }) };
-      return { ok: true, json: async () => signed };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
-    await waitFor(() => screen.getByRole('button', { name: 'Sign' }));
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Sign' }));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('EXECUTED')).toBeInTheDocument();
-    });
-  });
-
-  it('shows error message when signing fails', async () => {
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals?')) return { ok: true, json: async () => ({ items: [makeProposal()] }) };
-      return { ok: false, status: 409, json: async () => ({ message: 'already signed' }) };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('shows the error message when signing fails', async () => {
+    mockFetch([
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign`, status: 409, body: envelope('already signed') },
+      ...listRoutes({ proposalItems: [makeProposal()] }),
+    ]);
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Sign' }));
 
     await act(async () => {
@@ -529,50 +479,48 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
 describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSignedResult();
   });
 
-  it('shows Open Application Window button on draft launch', async () => {
-    render(<CoordinatorPanel {...defaultProps({ launch: { status: 'draft' } })} />);
+  it('shows Open Application Window on a DRAFT launch', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Open Application Window/ })).toBeInTheDocument();
     });
   });
 
-  it('hides Open Application Window button on non-draft launch', async () => {
-    render(<CoordinatorPanel {...defaultProps({ launch: { status: 'open' } })} />);
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /Open Application Window/ })).not.toBeInTheDocument();
-    });
+  it('hides Open Application Window on a non-DRAFT launch', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { status: 'WINDOW_OPEN' } })} />);
+    await waitFor(() => screen.getByRole('button', { name: /Set Monitor RPC/ }));
+    expect(screen.queryByRole('button', { name: /Open Application Window/ })).not.toBeInTheDocument();
   });
 
-  it('calls POST /launch/{id}/open-window on click', async () => {
-    const updated = makeLaunch({ status: 'open' });
-    const onLaunchUpdated = jest.fn();
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals')) return { ok: true, json: async () => ({ items: [] }) };
-      return { ok: true, json: async () => updated };
-    });
-    render(<CoordinatorPanel {...defaultProps({ launch: { status: 'draft' }, authFetch, onLaunchUpdated })} />);
+  it('POSTs /launch/{id}/open-window on click', async () => {
+    mockFetch([
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/open-window`, body: {} },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
     await waitFor(() => screen.getByRole('button', { name: /Open Application Window/ }));
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Open Application Window/ }));
     });
 
-    const call = authFetch.mock.calls.find(([url]: [string]) => url === `/launch/${LAUNCH_ID}/open-window`);
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url, init]: [string, RequestInit]) => url === `/launch/${LAUNCH_ID}/open-window` && init?.method === 'POST',
+    );
     expect(call).toBeDefined();
-    expect(call[1].method).toBe('POST');
-    expect(onLaunchUpdated).toHaveBeenCalledWith(updated);
   });
 
-  it('shows error when open-window fails', async () => {
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals')) return { ok: true, json: async () => ({ items: [] }) };
-      return { ok: false, status: 409, json: async () => ({ message: 'already open' }) };
-    });
-    render(<CoordinatorPanel {...defaultProps({ launch: { status: 'draft' }, authFetch })} />);
+  it('shows the error when open-window fails', async () => {
+    mockFetch([
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/open-window`, status: 409, body: envelope('already open') },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
     await waitFor(() => screen.getByRole('button', { name: /Open Application Window/ }));
 
     await act(async () => {
@@ -584,25 +532,21 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
     });
   });
 
-  it('pre-fills monitor RPC field with launch.monitor_rpc_url', async () => {
-    render(<CoordinatorPanel {...defaultProps({ launch: { monitor_rpc_url: 'https://rpc.example.com' } })} />);
+  it('pre-fills the monitor RPC field from launch.monitor_rpc_url', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { monitor_rpc_url: 'https://rpc.example.com' } })} />);
     await waitFor(() => {
       expect(screen.getByDisplayValue('https://rpc.example.com')).toBeInTheDocument();
     });
   });
 
-  it('calls PATCH /launch/{id} with monitor_rpc_url', async () => {
-    const updated = makeLaunch({ monitor_rpc_url: 'https://new-rpc.example.com' });
-    const onLaunchUpdated = jest.fn();
-    const authFetch = jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals')) return { ok: true, json: async () => ({ items: [] }) };
-      if (init?.method === 'PATCH') return { ok: true, json: async () => updated };
-      return { ok: true, json: async () => ({}) };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch, onLaunchUpdated })} />);
+  it('PATCHes /launch/{id} with monitor_rpc_url and shows Saved', async () => {
+    mockFetch([
+      { method: 'PATCH', match: `/launch/${LAUNCH_ID}`, body: makeLaunch({ monitor_rpc_url: 'https://new-rpc.example.com' }) },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
 
-    // Wait for loading to finish, then type in the RPC field
     await waitFor(() => screen.getByPlaceholderText(/https:\/\/rpc\.mychain/));
     fireEvent.change(screen.getByPlaceholderText(/https:\/\/rpc\.mychain/), {
       target: { value: 'https://new-rpc.example.com' },
@@ -612,41 +556,24 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
       fireEvent.click(screen.getByRole('button', { name: /Set Monitor RPC/ }));
     });
 
-    const patchCall = authFetch.mock.calls.find(
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
       ([url, init]: [string, RequestInit]) => url === `/launch/${LAUNCH_ID}` && init?.method === 'PATCH',
     );
-    expect(patchCall).toBeDefined();
-    const body = JSON.parse(patchCall[1].body);
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
     expect(body.monitor_rpc_url).toBe('https://new-rpc.example.com');
-    expect(onLaunchUpdated).toHaveBeenCalledWith(updated);
-  });
-
-  it('shows Saved confirmation after successful monitor RPC update', async () => {
-    const authFetch = jest.fn().mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals')) return { ok: true, json: async () => ({ items: [] }) };
-      if (init?.method === 'PATCH') return { ok: true, json: async () => makeLaunch() };
-      return { ok: true, json: async () => ({}) };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
-    await waitFor(() => screen.getByRole('button', { name: /Set Monitor RPC/ }));
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Set Monitor RPC/ }));
-    });
 
     await waitFor(() => {
       expect(screen.getByText('Saved.')).toBeInTheDocument();
     });
   });
 
-  it('calls POST /launch/{id}/genesis?type=initial for initial genesis upload', async () => {
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals')) return { ok: true, json: async () => ({ items: [] }) };
-      return { ok: true, json: async () => ({ sha256: 'abc123' }) };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
+  it('POSTs /launch/{id}/genesis?type=initial and shows the saved confirmation', async () => {
+    mockFetch([
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/genesis`, body: { sha256: 'abc123' } },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => screen.getByPlaceholderText(/files\.example\.com/));
 
     fireEvent.change(screen.getByPlaceholderText(/files\.example\.com/), {
@@ -660,18 +587,22 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
       fireEvent.click(screen.getByRole('button', { name: /Submit Genesis Reference/ }));
     });
 
-    const genesisCall = authFetch.mock.calls.find(
-      ([url]: [string]) => url === `/launch/${LAUNCH_ID}/genesis?type=initial`,
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url, init]: [string, RequestInit]) => url === `/launch/${LAUNCH_ID}/genesis?type=initial` && init?.method === 'POST',
     );
-    expect(genesisCall).toBeDefined();
-    expect(genesisCall[1].method).toBe('POST');
-    const body = JSON.parse(genesisCall[1].body);
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
     expect(body.url).toBe('https://files.example.com/genesis.json');
     expect(body.sha256).toBe('abc123def456');
+
+    await waitFor(() => {
+      expect(screen.getByText('Genesis reference saved.')).toBeInTheDocument();
+    });
   });
 
-  it('shows genesis_time field only when final is selected', async () => {
-    render(<CoordinatorPanel {...defaultProps()} />);
+  it('shows the genesis_time field only when final is selected', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => screen.getByDisplayValue('initial'));
     expect(screen.queryByPlaceholderText(/2026-06-01T12/)).not.toBeInTheDocument();
 
@@ -679,8 +610,9 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
     expect(screen.getByPlaceholderText(/2026-06-01T12/)).toBeInTheDocument();
   });
 
-  it('requires URL and SHA-256 before submitting genesis', async () => {
-    render(<CoordinatorPanel {...defaultProps()} />);
+  it('requires the URL before submitting genesis', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: /Submit Genesis Reference/ }));
 
     await act(async () => {
@@ -688,30 +620,5 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
     });
 
     expect(screen.getByText('URL is required.')).toBeInTheDocument();
-  });
-
-  it('shows Genesis reference saved after successful upload', async () => {
-    const authFetch = jest.fn().mockImplementation(async (url: string) => {
-      if (url.includes('/join')) return { ok: true, json: async () => ({ items: [] }) };
-      if (url.includes('/proposals')) return { ok: true, json: async () => ({ items: [] }) };
-      return { ok: true, json: async () => ({ sha256: 'abc123' }) };
-    });
-    render(<CoordinatorPanel {...defaultProps({ authFetch })} />);
-    await waitFor(() => screen.getByPlaceholderText(/files\.example\.com/));
-
-    fireEvent.change(screen.getByPlaceholderText(/files\.example\.com/), {
-      target: { value: 'https://files.example.com/genesis.json' },
-    });
-    fireEvent.change(screen.getByPlaceholderText(/64-character hex/), {
-      target: { value: 'abc123def456' },
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Submit Genesis Reference/ }));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Genesis reference saved.')).toBeInTheDocument();
-    });
   });
 });

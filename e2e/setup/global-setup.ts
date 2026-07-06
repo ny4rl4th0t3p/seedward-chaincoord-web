@@ -14,9 +14,12 @@ export const PID_FILE = join(tmpdir(), 'playwright-coordd.pid');
 const JWT_KEY_B64 = Buffer.alloc(32, 0x03).toString('base64');
 const AUDIT_KEY_B64 = Buffer.alloc(32, 0x04).toString('base64');
 
-// __dirname = web/app/e2e/setup — 4 levels up to repo root
-const REPO_ROOT = join(__dirname, '../../../..');
-const COORDD_BIN = join(REPO_ROOT, 'bin/coordd');
+// The web is now its own repo, so the coordd binary lives in the sibling seedward-chaincoord repo.
+// Default to ../seedward-chaincoord/bin/coordd (build it there first: `make build`); override with
+// the COORDD_BIN env var for other layouts (e.g. a container-built binary).
+// __dirname = seedward-chaincoord-web/e2e/setup → up 3 = the suite root, then seedward-chaincoord/bin.
+const COORDD_BIN =
+  process.env.COORDD_BIN ?? join(__dirname, '../../../seedward-chaincoord/bin/coordd');
 
 const GENESIS_PATH = join(tmpdir(), 'playwright-coordd-genesis');
 
@@ -26,7 +29,7 @@ export function coorddEnv(coordinatorAddr: string): NodeJS.ProcessEnv {
     COORD_LISTEN_ADDR: `:${COORDD_PORT}`,
     COORD_DB_PATH: DB_PATH,
     COORD_AUDIT_LOG_PATH: AUDIT_LOG_PATH,
-    COORD_GENESIS_PATH: GENESIS_PATH,
+    COORD_FILES_PATH: GENESIS_PATH,
     COORD_JWT_PRIVATE_KEY: JWT_KEY_B64,
     COORD_AUDIT_PRIVATE_KEY: AUDIT_KEY_B64,
     COORD_ADMIN_ADDRESSES: coordinatorAddr,
@@ -110,13 +113,14 @@ async function seedCoordinatorAllowlist(coordAddr: string): Promise<void> {
   }
   const { challenge } = await challengeRes.json() as { challenge: string };
 
-  // 2. Sign — same canonical JSON format as buildAuthPayload in utils/auth.ts.
+  // 2. Sign — same canonical JSON as buildAuthPayload (utils/auth.ts): the nonce is part of the
+  //    signed bytes (replay protection) and must equal the nonce sent to /auth/verify.
   const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const payload = JSON.stringify({ challenge, operator_address: coordAddr, timestamp });
+  const nonce = randomUUID();
+  const payload = JSON.stringify({ challenge, nonce, operator_address: coordAddr, timestamp });
   const stdSig = await coordinator().signArbitrary('cosmoshub-4', coordAddr, payload);
 
   // 3. Verify and receive JWT.
-  const nonce = randomUUID();
   const verifyRes = await fetch(`${base}/auth/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

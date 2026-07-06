@@ -87,9 +87,10 @@ describe('buildCanonicalActionPayload', () => {
 
     const parsed = JSON.parse(got);
     const keys = Object.keys(parsed);
-    // Must be alphabetical, must not include stripped fields
+    // Alphabetical; signature + pubkey_b64 are stripped, but nonce is KEPT (bound into the
+    // signed bytes for replay protection — see buildCanonicalActionPayload).
     expect(keys).toEqual([...keys].sort());
-    expect(keys).not.toContain('nonce');
+    expect(keys).toContain('nonce');
     expect(keys).not.toContain('signature');
     expect(keys).not.toContain('pubkey_b64');
     // gentx must be canonicalized recursively
