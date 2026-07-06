@@ -1,0 +1,2643 @@
+basePath: /
+definitions:
+  api.addCoordinatorRequest:
+    properties:
+      address:
+        type: string
+    type: object
+  api.addMemberRequest:
+    properties:
+      address:
+        type: string
+      label:
+        type: string
+    type: object
+  api.allocationFileMeta:
+    properties:
+      approved_by_proposal:
+        type: string
+      sha256:
+        type: string
+      status:
+        type: string
+      type:
+        type: string
+      uploaded_at:
+        type: string
+    type: object
+  api.allocationListResponse:
+    properties:
+      allocations:
+        items:
+          $ref: '#/definitions/api.allocationFileMeta'
+        type: array
+    type: object
+  api.allocationUploadResponse:
+    properties:
+      sha256:
+        type: string
+    type: object
+  api.auditPubKeyResponse:
+    properties:
+      public_key:
+        type: string
+    type: object
+  api.auditResponse:
+    properties:
+      entries:
+        items:
+          $ref: '#/definitions/ports.AuditEvent'
+        type: array
+    type: object
+  api.chainHintJSON:
+    properties:
+      bech32_prefix:
+        type: string
+      chain_id:
+        type: string
+      chain_name:
+        type: string
+      denom:
+        type: string
+    type: object
+  api.chainRecordJSON:
+    properties:
+      bech32_prefix:
+        type: string
+      binary_name:
+        type: string
+      binary_sha256:
+        type: string
+      binary_version:
+        type: string
+      chain_id:
+        type: string
+      chain_name:
+        type: string
+      denom:
+        type: string
+      genesis_time:
+        type: string
+      gentx_deadline:
+        type: string
+      max_commission_change_rate:
+        type: string
+      max_commission_rate:
+        type: string
+      min_self_delegation:
+        type: string
+      min_validator_count:
+        type: integer
+      repo_commit:
+        type: string
+      repo_url:
+        type: string
+      total_supply:
+        type: string
+    type: object
+  api.challengeRequest:
+    properties:
+      operator_address:
+        example: cosmos1abcdef...
+        type: string
+    type: object
+  api.challengeResponse:
+    properties:
+      challenge:
+        type: string
+    type: object
+  api.committeeJSON:
+    properties:
+      created_at:
+        type: string
+      creation_signature:
+        type: string
+      id:
+        type: string
+      lead_address:
+        type: string
+      members:
+        items:
+          $ref: '#/definitions/api.committeeMemberJSON'
+        type: array
+      threshold_m:
+        type: integer
+      total_n:
+        type: integer
+    type: object
+  api.committeeMemberJSON:
+    properties:
+      address:
+        type: string
+      moniker:
+        type: string
+      pub_key_b64:
+        type: string
+    type: object
+  api.committeeRequestJSON:
+    properties:
+      creation_signature:
+        type: string
+      lead_address:
+        type: string
+      members:
+        items:
+          $ref: '#/definitions/api.committeeMemberJSON'
+        type: array
+      threshold_m:
+        type: integer
+      total_n:
+        type: integer
+    type: object
+  api.coordinatorAllowlistEntryJSON:
+    properties:
+      added_at:
+        type: string
+      added_by:
+        type: string
+      address:
+        type: string
+    type: object
+  api.createLaunchRequest:
+    properties:
+      allowlist:
+        items:
+          type: string
+        type: array
+      committee:
+        $ref: '#/definitions/api.committeeRequestJSON'
+      launch_type:
+        example: MAINNET
+        type: string
+      record:
+        $ref: '#/definitions/api.chainRecordJSON'
+    type: object
+  api.dashboardJSON:
+    properties:
+      chain_id:
+        type: string
+      confirmed_ready:
+        type: integer
+      final_genesis_sha256:
+        type: string
+      genesis_time:
+        type: string
+      launch_id:
+        type: string
+      status:
+        type: string
+      threshold_status:
+        type: string
+      total_approved:
+        type: integer
+      validators:
+        items:
+          $ref: '#/definitions/api.validatorReadinessJSON'
+        type: array
+      voting_power_confirmed:
+        type: number
+    type: object
+  api.errorBody:
+    properties:
+      code:
+        type: string
+      invariants:
+        items:
+          $ref: '#/definitions/api.invariantResultJSON'
+        type: array
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+  api.errorEnvelope:
+    properties:
+      error:
+        $ref: '#/definitions/api.errorBody'
+    type: object
+  api.genesisHashResponse:
+    properties:
+      final_sha256:
+        type: string
+      initial_sha256:
+        type: string
+    type: object
+  api.genesisUploadResponse:
+    properties:
+      sha256:
+        type: string
+    type: object
+  api.gentxEntry:
+    properties:
+      consensus_pubkey:
+        type: string
+      gentx:
+        type: object
+      join_request_id:
+        type: string
+      operator_address:
+        type: string
+    type: object
+  api.gentxsResponse:
+    properties:
+      gentxs:
+        items:
+          $ref: '#/definitions/api.gentxEntry'
+        type: array
+    type: object
+  api.invariantResultJSON:
+    properties:
+      invariant:
+        type: string
+      ok:
+        type: boolean
+      reason:
+        type: string
+    type: object
+  api.joinRequestJSON:
+    properties:
+      approved_by_proposal:
+        type: string
+      consensus_pubkey:
+        type: string
+      gentx:
+        type: object
+      id:
+        type: string
+      launch_id:
+        type: string
+      memo:
+        type: string
+      moniker:
+        type: string
+      operator_address:
+        type: string
+      peer_address:
+        type: string
+      rejection_reason:
+        type: string
+      rpc_endpoint:
+        type: string
+      self_delegation:
+        type: string
+      status:
+        type: string
+      submitted_at:
+        type: string
+      submitter_address:
+        description: |-
+          SubmitterAddress is the hot actor that signed the submission — the members-list key and
+          the approval group key (M3). It may differ from OperatorAddress (an authorized uploader).
+        type: string
+    type: object
+  api.launchJSON:
+    properties:
+      created_at:
+        type: string
+      final_genesis_sha256:
+        type: string
+      id:
+        type: string
+      initial_genesis_sha256:
+        type: string
+      launch_type:
+        type: string
+      monitor_rpc_url:
+        type: string
+      record:
+        $ref: '#/definitions/api.chainRecordJSON'
+      rehearsal_endpoint:
+        type: string
+      rehearsal_service_pubkey:
+        description: RehearsalServicePubKey/RehearsalEndpoint are the bridge fields
+          (not secret).
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.memberJSON:
+    properties:
+      added_at:
+        type: string
+      added_by:
+        type: string
+      address:
+        type: string
+      label:
+        type: string
+    type: object
+  api.pageEnvelope-array_api_coordinatorAllowlistEntryJSON:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.coordinatorAllowlistEntryJSON'
+        type: array
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.pageEnvelope-array_api_joinRequestJSON:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.joinRequestJSON'
+        type: array
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.pageEnvelope-array_api_launchJSON:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.launchJSON'
+        type: array
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.pageEnvelope-array_api_proposalJSON:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.proposalJSON'
+        type: array
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.patchLaunchRequest:
+    properties:
+      allowlist:
+        items:
+          type: string
+        type: array
+      binary_sha256:
+        type: string
+      binary_version:
+        type: string
+      chain_name:
+        type: string
+      genesis_time:
+        type: string
+      min_validator_count:
+        type: integer
+      monitor_rpc_url:
+        type: string
+      rehearsal_endpoint:
+        type: string
+      rehearsal_service_pubkey:
+        description: Bridge D2 fields — operational, settable at any status.
+        type: string
+      repo_commit:
+        type: string
+      repo_url:
+        type: string
+      total_supply:
+        type: string
+    type: object
+  api.peerJSON:
+    properties:
+      operator_address:
+        type: string
+      peer_address:
+        type: string
+    type: object
+  api.peersResponse:
+    properties:
+      peers:
+        items:
+          $ref: '#/definitions/api.peerJSON'
+        type: array
+    type: object
+  api.proposalJSON:
+    properties:
+      action_type:
+        type: string
+      executed_at:
+        type: string
+      id:
+        type: string
+      launch_id:
+        type: string
+      payload:
+        type: object
+      proposed_at:
+        type: string
+      proposed_by:
+        type: string
+      signatures:
+        items:
+          $ref: '#/definitions/api.signatureEntryJSON'
+        type: array
+      status:
+        type: string
+      ttl_expires:
+        type: string
+    type: object
+  api.readinessConfirmJSON:
+    properties:
+      confirmed_at:
+        type: string
+      id:
+        type: string
+      launch_id:
+        type: string
+    type: object
+  api.rehearsalAllocJSON:
+    properties:
+      approved_by_proposal:
+        type: string
+      sha256:
+        type: string
+      url:
+        description: |-
+          URL is where the daemon streams the file — coordd's ops-gated per-file stream endpoint
+          (host bytes) or, for attestor-mode files, a 302 to the external URL. Relative to coordd's
+          base URL. The bytes are NOT inlined, so airdrop-scale files never buffer in memory.
+        type: string
+    type: object
+  api.rehearsalBinaryJSON:
+    properties:
+      name:
+        type: string
+      repo_commit:
+        type: string
+      repo_url:
+        type: string
+      sha256:
+        type: string
+      version:
+        type: string
+    type: object
+  api.rehearsalChainJSON:
+    properties:
+      bech32_prefix:
+        type: string
+      binary:
+        $ref: '#/definitions/api.rehearsalBinaryJSON'
+      chain_id:
+        type: string
+      denom:
+        type: string
+      genesis_time:
+        type: string
+      max_commission_change_rate:
+        type: string
+      max_commission_rate:
+        type: string
+      min_self_delegation:
+        type: string
+      min_validator_count:
+        type: integer
+      total_supply:
+        type: string
+    type: object
+  api.rehearsalClaimRequest:
+    properties:
+      runner_id:
+        type: string
+    type: object
+  api.rehearsalGentxJSON:
+    properties:
+      consensus_pubkey:
+        type: string
+      gentx:
+        type: object
+      moniker:
+        type: string
+      operator_address:
+        type: string
+      self_delegation:
+        type: string
+    type: object
+  api.rehearsalInputJSON:
+    properties:
+      allocations:
+        additionalProperties:
+          $ref: '#/definitions/api.rehearsalAllocJSON'
+        type: object
+      attempt_id:
+        type: string
+      chain:
+        $ref: '#/definitions/api.rehearsalChainJSON'
+      generated_at:
+        type: string
+      gentxs:
+        items:
+          $ref: '#/definitions/api.rehearsalGentxJSON'
+        type: array
+      input_set_hash:
+        type: string
+      launch_id:
+        type: string
+      schema_version:
+        type: integer
+      status:
+        type: string
+    type: object
+  api.rehearsalLeaseConflictJSON:
+    properties:
+      claimed_at:
+        type: string
+      claimed_by:
+        type: string
+      lease_expires_at:
+        type: string
+    type: object
+  api.rehearsalResultAckJSON:
+    properties:
+      attempt_id:
+        type: string
+      launch_id:
+        type: string
+      outcome:
+        type: string
+      recorded_at:
+        type: string
+      stale:
+        type: boolean
+    type: object
+  api.rehearsalResultJSON:
+    properties:
+      attempt_id:
+        type: string
+      binary_name:
+        type: string
+      binary_sha256:
+        type: string
+      binary_version:
+        type: string
+      blocks_advanced:
+        type: integer
+      engine_version:
+        type: string
+      failed_step:
+        type: string
+      finished_at:
+        type: string
+      input_set_hash:
+        type: string
+      outcome:
+        type: string
+      recorded_at:
+        type: string
+      stale:
+        type: boolean
+      started_at:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/api.rehearsalResultStepJSON'
+        type: array
+      summary:
+        type: string
+      validators:
+        type: integer
+    type: object
+  api.rehearsalResultStepJSON:
+    properties:
+      detail:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+    type: object
+  api.sessionInfoJSON:
+    properties:
+      expires_at:
+        type: string
+      is_coordinator:
+        type: boolean
+      operator_address:
+        type: string
+    type: object
+  api.signatureEntryJSON:
+    properties:
+      coordinator_address:
+        type: string
+      decision:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  api.submitterGroupJSON:
+    properties:
+      label:
+        type: string
+      request_count:
+        type: integer
+      requests:
+        items:
+          $ref: '#/definitions/api.joinRequestJSON'
+        type: array
+      submitter_address:
+        type: string
+      total_self_delegation:
+        type: string
+    type: object
+  api.tokenResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  api.validatorReadinessJSON:
+    properties:
+      binary_hash_confirmed:
+        type: string
+      genesis_hash_confirmed:
+        type: string
+      is_ready:
+        type: boolean
+      join_request_id:
+        type: string
+      last_confirmed_at:
+        type: string
+      moniker:
+        type: string
+      operator_address:
+        type: string
+      voting_power_pct:
+        type: number
+    type: object
+  ports.AuditEvent:
+    properties:
+      event_name:
+        description: EventName matches domain.DomainEvent.EventName()
+        type: string
+      launch_id:
+        description: LaunchID scopes the event to a specific launch for per-launch
+          filtering.
+        type: string
+      occurred_at:
+        type: string
+      payload:
+        description: |-
+          Payload is the canonical JSON of the domain event, stored as raw JSON
+          so audit entries are human-readable without base64 decoding.
+        type: object
+      prev_hash:
+        description: |-
+          PrevHash is the SHA-256 hex digest of the previous entry's raw JSON bytes
+          (the full marshaled line, signature included). Empty for the first entry.
+          Included in the signature of the current entry so it cannot be silently altered.
+        type: string
+      signature:
+        description: |-
+          Signature is a base64 Ed25519 signature over the canonical JSON of this entry
+          (excluding the signature field itself), signed by the server's audit key.
+        type: string
+    type: object
+  proposal.ActionType:
+    enum:
+    - APPROVE_VALIDATOR
+    - REJECT_VALIDATOR
+    - REMOVE_APPROVED_VALIDATOR
+    - APPROVE_ALLOCATION_FILE
+    - PUBLISH_CHAIN_RECORD
+    - CLOSE_APPLICATION_WINDOW
+    - PUBLISH_GENESIS
+    - UPDATE_GENESIS_TIME
+    - REPLACE_COMMITTEE_MEMBER
+    - REVISE_GENESIS
+    - EXPAND_COMMITTEE
+    - SHRINK_COMMITTEE
+    type: string
+    x-enum-varnames:
+    - ActionApproveValidator
+    - ActionRejectValidator
+    - ActionRemoveApprovedValidator
+    - ActionApproveAllocationFile
+    - ActionPublishChainRecord
+    - ActionCloseApplicationWindow
+    - ActionPublishGenesis
+    - ActionUpdateGenesisTime
+    - ActionReplaceCommitteeMember
+    - ActionReviseGenesis
+    - ActionExpandCommittee
+    - ActionShrinkCommittee
+  proposal.Decision:
+    enum:
+    - SIGN
+    - VETO
+    type: string
+    x-enum-varnames:
+    - DecisionSign
+    - DecisionVeto
+  services.ConfirmInput:
+    properties:
+      binary_hash_confirmed:
+        type: string
+      genesis_hash_confirmed:
+        type: string
+      nonce:
+        type: string
+      operator_address:
+        type: string
+      pubkey_b64:
+        description: |-
+          PubKeyB64 is the operator's secp256k1 compressed public key (base64, 33 bytes) used to verify the
+          confirmation signature.
+        type: string
+      signature:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  services.RaiseInput:
+    properties:
+      action_type:
+        $ref: '#/definitions/proposal.ActionType'
+      coordinator_address:
+        type: string
+      nonce:
+        type: string
+      payload:
+        type: object
+      signature:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  services.RehearsalResultFact:
+    properties:
+      attempt_id:
+        type: string
+      failed_step:
+        type: string
+      finished_at:
+        type: string
+      input_set_hash:
+        type: string
+      launch_id:
+        type: string
+      outcome:
+        type: string
+      rehearsal:
+        $ref: '#/definitions/services.RehearsalResultFactMeta'
+      schema_version:
+        type: integer
+      service_pubkey:
+        type: string
+      signature:
+        type: string
+      started_at:
+        type: string
+      steps:
+        items:
+          $ref: '#/definitions/services.RehearsalResultFactStep'
+        type: array
+      summary:
+        type: string
+    type: object
+  services.RehearsalResultFactMeta:
+    properties:
+      binary_name:
+        type: string
+      binary_sha256:
+        type: string
+      binary_version:
+        type: string
+      blocks_advanced:
+        type: integer
+      engine_version:
+        type: string
+      validators:
+        type: integer
+    type: object
+  services.RehearsalResultFactStep:
+    properties:
+      detail:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+    type: object
+  services.SignInput:
+    properties:
+      coordinator_address:
+        type: string
+      decision:
+        $ref: '#/definitions/proposal.Decision'
+      nonce:
+        type: string
+      signature:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  services.SubmitInput:
+    properties:
+      chain_id:
+        type: string
+      gentx:
+        type: object
+      memo:
+        type: string
+      nonce:
+        type: string
+      operator_address:
+        type: string
+      peer_address:
+        type: string
+      pubkey_b64:
+        description: |-
+          PubKeyB64 is the operator's secp256k1 compressed public key (base64, 33 bytes) used to verify the
+          request signature. Distinct from the consensus key, which is extracted from the gentx.
+        type: string
+      rpc_endpoint:
+        type: string
+      signature:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  services.VerifyChallengeInput:
+    properties:
+      challenge:
+        type: string
+      nonce:
+        description: |-
+          Nonce is included in the signed bytes (replay protection) and consumed once
+          per (operator, nonce) by the nonce store.
+        type: string
+      operator_address:
+        type: string
+      pubkey_b64:
+        description: |-
+          PubKeyB64 is the caller's secp256k1 compressed public key (33 bytes, base64-encoded).
+          Required so the server can verify the signature — bech32 addresses are hashes
+          and the public key cannot be recovered from them.
+          Stripped before signing — not included in the canonical bytes.
+        type: string
+      signature:
+        description: Signature is stripped before signing — not included in the canonical
+          bytes.
+        type: string
+      timestamp:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Chain launch coordination server. Coordinators and validators authenticate
+    via secp256k1 challenge-response (ADR-036)
+  title: ChainCoord API
+  version: "1.0"
+paths:
+  /admin/coordinators:
+    get:
+      description: Returns all addresses on the coordinator allowlist. Admin only.
+        Paginated.
+      parameters:
+      - description: Page number
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        maximum: 100
+        minimum: 1
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.pageEnvelope-array_api_coordinatorAllowlistEntryJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List coordinator allowlist
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: Adds an address to the coordinator allowlist. Admin only. Idempotent.
+      parameters:
+      - description: Address to add
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.addCoordinatorRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.coordinatorAllowlistEntryJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Add coordinator to allowlist
+      tags:
+      - admin
+  /admin/coordinators/{address}:
+    delete:
+      description: Removes an address from the coordinator allowlist. Admin only.
+      parameters:
+      - description: Operator address to remove
+        in: path
+        name: address
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Remove coordinator from allowlist
+      tags:
+      - admin
+  /admin/sessions/{address}:
+    delete:
+      parameters:
+      - description: Operator address
+        in: path
+        name: address
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Revoke all sessions for an operator (admin)
+      tags:
+      - admin
+  /audit/pubkey:
+    get:
+      description: Returns the server's Ed25519 public key for offline audit log signature
+        verification.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.auditPubKeyResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Get audit public key
+      tags:
+      - audit
+  /auth/challenge:
+    post:
+      consumes:
+      - application/json
+      description: Issues a short-lived challenge for the given operator address.
+        Rate-limited to 10 req/IP/min and 5 req/operator/5min.
+      parameters:
+      - description: Operator address
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.challengeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.challengeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Request an auth challenge
+      tags:
+      - auth
+  /auth/session:
+    delete:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Revoke the current session
+      tags:
+      - auth
+    get:
+      description: Returns the operator address, expiry, and coordinator status of
+        the supplied session token.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.sessionInfoJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get current session info
+      tags:
+      - auth
+  /auth/sessions/all:
+    delete:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Revoke all sessions for the current operator
+      tags:
+      - auth
+  /auth/verify:
+    post:
+      consumes:
+      - application/json
+      description: Validates the signed challenge response and issues a session token.
+      parameters:
+      - description: Signed challenge payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/services.VerifyChallengeInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.tokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Verify a signed challenge
+      tags:
+      - auth
+  /bridge/launches/{id}/allocations/{type}:
+    get:
+      description: |-
+        Streams a launch's allocation file (host mode → raw bytes; attestor mode → 302 to the
+        external URL). Ops-credential only. Streamed, not buffered — safe for airdrop-scale files.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Allocation type (accounts/claims/grants/authz/feegrant)
+        in: path
+        name: type
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: Raw file bytes (host mode)
+          schema:
+            type: string
+        "302":
+          description: Redirect to external URL (attestor mode)
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Rehearsal allocation file (bridge)
+      tags:
+      - bridge
+  /bridge/launches/{id}/rehearsal-claim:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Acquires the single-writer run lease for the launch's current input set and returns the
+        full build input (chain + gentxs + allocation URLs + attempt_id). 409 if another runner
+        already holds an unexpired lease. Ops-credential only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Runner identity
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.rehearsalClaimRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.rehearsalInputJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.rehearsalLeaseConflictJSON'
+      summary: Claim a rehearsal run (bridge)
+      tags:
+      - bridge
+  /bridge/launches/{id}/rehearsal-input:
+    get:
+      description: |-
+        Returns the launch's approved rehearsal build input (chain + approved gentxs + approved
+        host-mode allocation files) plus input_set_hash. Ops-credential only. 422 if an approved
+        allocation is attestor-mode (run the rehearsal standalone instead).
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.rehearsalInputJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Rehearsal input (bridge)
+      tags:
+      - bridge
+  /bridge/launches/{id}/rehearsal-results:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Verifies the fact's Ed25519 signature against the launch's trusted service pubkey and
+        that it references an attempt coordd minted (anti-fabrication), then stores it —
+        flagged stale if the approved input set has since changed. Ops-credential only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Signed result fact
+        in: body
+        name: fact
+        required: true
+        schema:
+          $ref: '#/definitions/services.RehearsalResultFact'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.rehearsalResultAckJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Rehearsal result write-back (bridge)
+      tags:
+      - bridge
+  /committee/{launch_id}:
+    get:
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: launch_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.committeeJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Get committee
+      tags:
+      - committee
+  /healthz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - health
+  /launch:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new chain launch. When launch_policy is "restricted",
+        the caller must be on the coordinator allowlist.
+      parameters:
+      - description: Launch definition
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.createLaunchRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.launchJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Create a launch
+      tags:
+      - launches
+  /launch/{id}:
+    get:
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.launchJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Get a launch
+      tags:
+      - launches
+    patch:
+      consumes:
+      - application/json
+      description: Partially updates mutable fields on a DRAFT launch. Coordinator
+        only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Partial update (all fields optional)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/api.patchLaunchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.launchJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Update a launch
+      tags:
+      - launches
+  /launch/{id}/allocations:
+    get:
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.allocationListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: List allocation files
+      tags:
+      - allocations
+  /launch/{id}/allocations/{type}:
+    get:
+      description: Returns 302 redirect (attestor mode) or streams the raw opaque
+        file bytes (host mode).
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Allocation type
+        enum:
+        - accounts
+        - claims
+        - grants
+        - authz
+        - feegrant
+        in: path
+        name: type
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: Raw allocation file bytes (host mode)
+          schema:
+            type: string
+        "302":
+          description: Redirect to external URL (attestor mode)
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Download an allocation file
+      tags:
+      - allocations
+    post:
+      consumes:
+      - application/json
+      - application/octet-stream
+      description: |-
+        Committee members only.
+        Attestor mode (default): register external URL + SHA-256.
+        Host mode: upload raw bytes (requires COORD_GENESIS_HOST_MODE=true).
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Allocation type
+        enum:
+        - accounts
+        - claims
+        - grants
+        - authz
+        - feegrant
+        in: path
+        name: type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.allocationUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Upload an allocation file
+      tags:
+      - allocations
+  /launch/{id}/audit:
+    get:
+      description: Returns all audit log entries for a launch. Visibility-gated (same
+        rules as GET /launch/{id}).
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.auditResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Get audit log
+      tags:
+      - audit
+  /launch/{id}/cancel:
+    post:
+      description: |-
+        Transitions a launch to CANCELED. Only the committee lead may call this.
+        No quorum required — cancellation is a single-actor emergency action.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.launchJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "409":
+          description: Launch is already in a terminal status
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Cancel a launch
+      tags:
+      - launches
+  /launch/{id}/chain-hint:
+    get:
+      description: Returns chain_id, chain_name, bech32_prefix, and denom. No authentication
+        required.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.chainHintJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Chain hint
+      tags:
+      - launches
+  /launch/{id}/committee:
+    post:
+      consumes:
+      - application/json
+      description: Replaces the committee on a DRAFT launch. Lead coordinator only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Committee definition
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.committeeRequestJSON'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.committeeJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Set committee
+      tags:
+      - committee
+  /launch/{id}/dashboard:
+    get:
+      description: Returns combined launch and readiness status for all approved validators.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.dashboardJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Get launch dashboard
+      tags:
+      - readiness
+  /launch/{id}/events:
+    get:
+      description: Server-Sent Events stream. Each SSE event carries a JSON-encoded
+        domain event. Connect and listen for live updates.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: 'SSE stream — events formatted as: event: <name>\ndata: <json>\n\n'
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Subscribe to launch events (SSE)
+      tags:
+      - events
+  /launch/{id}/genesis:
+    get:
+      description: Returns 302 redirect (attestor mode) or streams raw genesis JSON
+        (host mode).
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Raw genesis JSON (host mode)
+          schema:
+            type: string
+        "302":
+          description: Redirect to external genesis URL (attestor mode)
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Download genesis file
+      tags:
+      - genesis
+    post:
+      consumes:
+      - application/json
+      - application/octet-stream
+      description: |-
+        Committee members only.
+        Attestor mode (default): register external URL + SHA-256.
+        Host mode: upload raw bytes (requires COORD_GENESIS_HOST_MODE=true).
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Genesis type
+        enum:
+        - initial
+        - final
+        in: query
+        name: type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.genesisUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "413":
+          description: Request Entity Too Large
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Upload genesis file
+      tags:
+      - genesis
+  /launch/{id}/genesis/hash:
+    get:
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.genesisHashResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Get genesis hashes
+      tags:
+      - genesis
+  /launch/{id}/gentxs:
+    get:
+      description: Returns the gentx JSON for all approved join requests. Coordinator
+        only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.gentxsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Download approved gentxs
+      tags:
+      - join-requests
+  /launch/{id}/join:
+    get:
+      description: Coordinator-only. Returns all join requests for a launch.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Filter by status
+        enum:
+        - pending
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - description: Page number
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        maximum: 100
+        minimum: 1
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.pageEnvelope-array_api_joinRequestJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List join requests
+      tags:
+      - join-requests
+    post:
+      consumes:
+      - application/json
+      description: Validator submits a signed join request. Rate-limited to 60 req/IP/min.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Join request payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/services.SubmitInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.joinRequestJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Submit a join request
+      tags:
+      - join-requests
+  /launch/{id}/join/{req_id}:
+    get:
+      description: Coordinator or the owning validator may fetch a single join request.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Join request UUID
+        in: path
+        name: req_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.joinRequestJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get a join request
+      tags:
+      - join-requests
+  /launch/{id}/join/grouped:
+    get:
+      description: |-
+        Returns join requests grouped by the submitting hot actor, each group carrying the member label
+        and per-actor aggregates (count, total self-delegation). Coordinator-only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.submitterGroupJSON'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List join requests grouped by submitter
+      tags:
+      - join
+  /launch/{id}/members:
+    get:
+      description: Returns the launch's members list (address + label + provenance),
+        sorted by address. Committee members only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.memberJSON'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List launch members
+      tags:
+      - members
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Adds a hot actor address (with a label) to the launch's members list — granting see + submit access.
+        Committee members only. Allowed only in DRAFT/PUBLISHED/WINDOW_OPEN. Idempotent on address.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Address and label to add
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.addMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.memberJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Add a launch member
+      tags:
+      - members
+  /launch/{id}/members/{address}:
+    delete:
+      description: |-
+        Removes a hot actor address from the launch's members list — revoking see + submit access.
+        Committee members only. Allowed only in DRAFT/PUBLISHED/WINDOW_OPEN.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Operator address to remove
+        in: path
+        name: address
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Remove a launch member
+      tags:
+      - members
+  /launch/{id}/open-window:
+    post:
+      description: Transitions a launch from DRAFT to OPEN. Coordinator only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.launchJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Open the application window
+      tags:
+      - launches
+  /launch/{id}/peers:
+    get:
+      description: Returns peer addresses of all approved validators. Use ?format=text
+        for persistent_peers format (comma-separated).
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Output format
+        enum:
+        - json
+        - text
+        in: query
+        name: format
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: JSON format; with ?format=text returns comma-separated text/plain
+          schema:
+            $ref: '#/definitions/api.peersResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Get approved validator peers
+      tags:
+      - readiness
+  /launch/{id}/proposal:
+    post:
+      consumes:
+      - application/json
+      description: Coordinator raises a new action proposal. Rate-limited to 60 req/IP/min.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Proposal payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/services.RaiseInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.proposalJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Raise a proposal
+      tags:
+      - proposals
+  /launch/{id}/proposal/{prop_id}:
+    get:
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Proposal UUID
+        in: path
+        name: prop_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.proposalJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get a proposal
+      tags:
+      - proposals
+  /launch/{id}/proposal/{prop_id}/sign:
+    post:
+      consumes:
+      - application/json
+      description: Coordinator adds their SIGN or VETO decision to a pending proposal.
+        Rate-limited to 60 req/IP/min.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Proposal UUID
+        in: path
+        name: prop_id
+        required: true
+        type: string
+      - description: Signing payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/services.SignInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.proposalJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Sign or veto a proposal
+      tags:
+      - proposals
+  /launch/{id}/proposals:
+    get:
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        maximum: 100
+        minimum: 1
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.pageEnvelope-array_api_proposalJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List proposals
+      tags:
+      - proposals
+  /launch/{id}/ready:
+    post:
+      consumes:
+      - application/json
+      description: Validator submits a signed readiness confirmation. Rate-limited
+        to 60 req/IP/min.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Readiness confirmation
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/services.ConfirmInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.readinessConfirmJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Confirm readiness
+      tags:
+      - readiness
+  /launch/{id}/rehearsal:
+    get:
+      description: |-
+        Returns the launch's recorded rehearsal results — outcome, which step failed, the
+        input-set hash the run consumed, and a `stale` flag (the approved inputs changed
+        since the run) — newest first. Committee members only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.rehearsalResultJSON'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Rehearsal results (committee read-back)
+      tags:
+      - rehearsal
+  /launch/{id}/rehearsal/{attempt_id}/reset:
+    post:
+      description: |-
+        Coordinator override that returns a stuck (crashed-runner) rehearsal attempt to OPEN so
+        the run can be re-claimed before the lease TTL expires. Committee members only.
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Attempt UUID
+        in: path
+        name: attempt_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Lease reset
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Reset a rehearsal run lease
+      tags:
+      - rehearsal
+  /launches:
+    get:
+      description: Returns a paginated list of launches. Visibility is filtered based
+        on auth status.
+      parameters:
+      - description: Page number
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        maximum: 100
+        minimum: 1
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.pageEnvelope-array_api_launchJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: List launches
+      tags:
+      - launches
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: 'Session token obtained from POST /auth/verify. Format: "Bearer <token>"'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
