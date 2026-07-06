@@ -3,6 +3,7 @@ import { validator } from '../fixtures/keypairs';
 import { createLaunch } from '../helpers/launch';
 import { loginAs } from '../helpers/auth';
 import { installValidatorWalletStub } from '../helpers/wallet-stub';
+import { makeSignedGentx } from '../helpers/gentx';
 
 // K.4 (validator single-actor) + K.5 (multi-actor full flow)
 
@@ -12,7 +13,11 @@ test('K.4.1val submit join request shows pending status', async ({ browser }) =>
   // Coordinator context — create and open a launch.
   const coordCtx = await browser.newContext();
   const coordPage = await coordCtx.newPage();
-  const launchId = await createLaunch(coordPage, { chainName: 'k4val1', chainId: 'k4val1-1', bech32Prefix: 'k4v1' });
+  // The validator must be a member (see-set) before it can read the launch / submit a join request.
+  const launchId = await createLaunch(coordPage, {
+    chainName: 'k4val1', chainId: 'k4val1-1', bech32Prefix: 'k4v1',
+    members: [validator().address('k4v1')],
+  });
 
   // Upload initial genesis ref (required before OpenWindow — server auto-publishes from DRAFT+SHA).
   await coordPage.getByPlaceholder('https://files.example.com/genesis.json').fill('https://example.com/genesis.json');
@@ -33,9 +38,12 @@ test('K.4.1val submit join request shows pending status', async ({ browser }) =>
   await installValidatorWalletStub(valPage, validator(), 'k4v1');
   await loginAs(valPage, validator(), { bech32Prefix: 'k4v1', navigateTo: `/launch/${launchId}` });
 
-  // Fill and submit join request.
+  // Fill and submit join request with a real signed gentx (self-signed by the validator key).
+  const gentx = await makeSignedGentx({
+    keypair: validator(), chainId: 'k4val1-1', bech32Prefix: 'k4v1', denom: 'uk4val1',
+  });
   await valPage.getByPlaceholder(/1\.2\.3\.4/i).fill('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@1.2.3.4:26656');
-  await valPage.getByPlaceholder(/MsgCreateValidator/).fill('{"body":{"messages":[{"@type":"/cosmos.staking.v1beta1.MsgCreateValidator","description":{"moniker":"e2e-validator"},"pubkey":{"@type":"/cosmos.crypto.ed25519.PubKey","key":"f5DzEhtQbnmXE/WZQsX+I8RljPdEU0u0ncVGtniFyEM="},"value":{"denom":"uk4val1","amount":"1000000"}}]},"auth_info":{},"signatures":[]}');
+  await valPage.getByPlaceholder(/MsgCreateValidator/).fill(gentx);
   await valPage.getByRole('button', { name: /submit join request/i }).click();
 
   await expect(valPage.getByText(/pending/i)).toBeVisible({ timeout: 10_000 });
@@ -59,6 +67,8 @@ test('K.5 full launch flow: create → open → join → approve', async ({ brow
     chainId: 'k5chain-1',
     bech32Prefix: CHAIN_PREFIX,
     denom: 'uk5',
+    // Grant the validator see-set access up front (v1 join requires prior membership).
+    members: [validator().address(CHAIN_PREFIX)],
   });
 
   // Upload initial genesis ref (required before OpenWindow — server auto-publishes from DRAFT+SHA).
@@ -79,8 +89,11 @@ test('K.5 full launch flow: create → open → join → approve', async ({ brow
   await installValidatorWalletStub(valPage, validator(), CHAIN_PREFIX);
   await loginAs(valPage, validator(), { bech32Prefix: CHAIN_PREFIX, navigateTo: `/launch/${launchId}` });
 
+  const gentx = await makeSignedGentx({
+    keypair: validator(), chainId: 'k5chain-1', bech32Prefix: CHAIN_PREFIX, denom: 'uk5',
+  });
   await valPage.getByPlaceholder(/1\.2\.3\.4/i).fill('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@1.2.3.4:26656');
-  await valPage.getByPlaceholder(/MsgCreateValidator/).fill('{"body":{"messages":[{"@type":"/cosmos.staking.v1beta1.MsgCreateValidator","description":{"moniker":"e2e-validator"},"pubkey":{"@type":"/cosmos.crypto.ed25519.PubKey","key":"f5DzEhtQbnmXE/WZQsX+I8RljPdEU0u0ncVGtniFyEM="},"value":{"denom":"uk5","amount":"1000000"}}]},"auth_info":{},"signatures":[]}');
+  await valPage.getByPlaceholder(/MsgCreateValidator/).fill(gentx);
   await valPage.getByRole('button', { name: /submit join request/i }).click();
   await expect(valPage.getByText(/pending/i)).toBeVisible({ timeout: 10_000 });
 
@@ -93,8 +106,9 @@ test('K.5 full launch flow: create → open → join → approve', async ({ brow
   await approveBtn.click();
   await coordPage.getByRole('button', { name: /sign & raise/i }).click();
 
-  // Sign the proposal (1-of-1 threshold → auto-executes).
-  await expect(coordPage.getByText(/executed/i)).toBeVisible({ timeout: 15_000 });
+  // Sign the proposal (1-of-1 threshold → auto-executes). Match the status badge specifically —
+  // the "Proposal raised:" feedback also contains "executed", which would trip strict mode.
+  await expect(coordPage.getByText('EXECUTED', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
   // ── Step 4: validator sees approved banner ──────────────────────────────────
   await valPage.reload();

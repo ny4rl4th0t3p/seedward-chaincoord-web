@@ -8,8 +8,12 @@ const VALIDATOR_PRIVKEY = new Uint8Array(32).fill(0x02);
 export interface TestKeypair {
   /** bech32 address derived with the given prefix */
   address(prefix: string): string;
+  /** bech32 `<prefix>valoper` operator address (same RIPEMD160(SHA256(pubkey)) bytes). */
+  valoperAddress(prefix: string): string;
   /** base64-encoded 33-byte compressed public key */
   pubKeyB64: string;
+  /** Signs a 32-byte digest with secp256k1, returning the 64-byte compact r‖s (low-S). */
+  signDigest(hash: Uint8Array): Promise<Uint8Array>;
   /**
    * Replicates Keplr's signArbitrary: builds the ADR-036 amino sign doc,
    * SHA-256 hashes it, and signs with secp256k1. Returns a StdSignature.
@@ -36,20 +40,28 @@ async function makeTestKeypair(privKeyBytes: Uint8Array): Promise<TestKeypair> {
   const addrBytes = ripemd160(sha256(compressedPubKey));
   const pubKeyB64 = toBase64(compressedPubKey);
 
+  // createSignature returns an ExtendedSecp256k1Signature (65 bytes r‖s‖recovery); Go's verifier
+  // expects compact 64-byte r‖s, so build it manually. Shared by ADR-036 auth and gentx signing.
+  async function signHash(hash: Uint8Array): Promise<Uint8Array> {
+    const sig = await Secp256k1.createSignature(hash, privKeyBytes);
+    const sig64 = new Uint8Array(64);
+    sig64.set(sig.r(32), 0);
+    sig64.set(sig.s(32), 32);
+    return sig64;
+  }
+
   return {
     address(prefix: string): string {
       return toBech32(prefix, addrBytes);
     },
+    valoperAddress(prefix: string): string {
+      return toBech32(prefix + 'valoper', addrBytes);
+    },
     pubKeyB64,
+    signDigest: signHash,
     async signArbitrary(_chainId, address, message) {
       const aminoBytes = buildADR036AminoBytes(address, message);
-      const hash = sha256(aminoBytes);
-      const sig = await Secp256k1.createSignature(hash, privKeyBytes);
-      // createSignature returns ExtendedSecp256k1Signature whose toFixedLength() is 65 bytes (r‖s‖recovery).
-      // Go's verifier expects compact 64-byte r‖s — build it manually.
-      const sig64 = new Uint8Array(64);
-      sig64.set(sig.r(32), 0);
-      sig64.set(sig.s(32), 32);
+      const sig64 = await signHash(sha256(aminoBytes));
       return {
         pub_key: { type: 'tendermint/PubKeySecp256k1', value: pubKeyB64 },
         signature: toBase64(sig64),

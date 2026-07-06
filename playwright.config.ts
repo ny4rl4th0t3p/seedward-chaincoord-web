@@ -7,10 +7,18 @@ export default defineConfig({
   workers: 1,
   timeout: 30_000,
   expect: { timeout: 10_000 },
+  // One retry in CI to smooth over the occasional SSE/dev-server timing flake; none locally.
+  retries: process.env.CI ? 1 : 0,
+  // HTML report (for the CI artifact) + list output; list only when iterating locally.
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://localhost:3000',
     // Slow down actions slightly so SSE state changes propagate before assertions.
     actionTimeout: 10_000,
+    // Trace the retry of a failing test (kept lean; retain-on-failure doubled runtimes + caused
+    // 30s-timeout flakes). Flip to 'retain-on-failure' when you need the first-attempt trace.
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
   },
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
