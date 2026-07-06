@@ -1,11 +1,36 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Box, Text } from '@interchain-ui/react';
 import { CosmosWallet } from '@interchain-kit/core';
 import type { StatefulWallet } from '@interchain-kit/react/store/stateful-wallet';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components';
 import { buildSignedAction, buildCanonicalActionPayload } from '@/utils/signedAction';
 import type { ChainHint } from '@/utils/chainSuggestion';
-import type { Committee, JoinRequest, Launch, Proposal } from '@/types';
+import {
+  usePostLaunchIdProposal,
+  usePostLaunchIdProposalPropIdSign,
+  useGetLaunchIdProposals,
+} from '@/api/generated/proposals/proposals';
+import {
+  useGetLaunchIdJoin,
+  getLaunchIdGentxs,
+} from '@/api/generated/join-requests/join-requests';
+import {
+  usePostLaunchIdOpenWindow,
+  usePatchLaunchId,
+  usePostLaunchIdCancel,
+} from '@/api/generated/launches/launches';
+import { postLaunchIdGenesis } from '@/api/generated/genesis/genesis';
+import { usePostLaunchIdCommittee } from '@/api/generated/committee/committee';
+import type {
+  ApiErrorEnvelope,
+  ApiLaunchJSON,
+  ApiCommitteeJSON,
+  ApiJoinRequestJSON,
+  ApiProposalJSON,
+  ServicesRaiseInput,
+  ServicesSignInput,
+} from '@/api/generated/model';
 
 // ── Shared UI primitives (mirrors ValidatorPanel) ─────────────────────────────
 
@@ -63,10 +88,12 @@ function TextInput({
 }
 
 function StatusBadge({ status }: { status: string }) {
+  // Shared by join-request (PENDING/APPROVED/REJECTED) and proposal
+  // (PENDING_SIGNATURES/EXECUTED/VETOED/EXPIRED) statuses — coordd's exact wire values.
   const color =
-    status === 'pending'
+    status === 'PENDING' || status === 'PENDING_SIGNATURES'
       ? '$textSecondary'
-      : status === 'approved'
+      : status === 'APPROVED' || status === 'EXECUTED'
       ? '$textSuccess'
       : '$textDanger';
   return (
@@ -90,10 +117,9 @@ interface ProposalFormProps {
   address: string;
   wallet: StatefulWallet;
   signingChainId: string;
-  jr: JoinRequest;
+  jr: ApiJoinRequestJSON;
   action: ActionKind;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
-  onSuccess: (proposal: Proposal) => void;
+  onSuccess: (proposal: ApiProposalJSON) => void;
   onCancel: () => void;
 }
 
@@ -105,7 +131,6 @@ function ProposalForm({
   signingChainId,
   jr,
   action,
-  authFetch,
   onSuccess,
   onCancel,
 }: ProposalFormProps) {
@@ -113,12 +138,15 @@ function ProposalForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const raiseProposal = usePostLaunchIdProposal();
+  const queryClient = useQueryClient();
+
   const handleSubmit = async () => {
     setError(null);
 
     const payloadObj: Record<string, string> = {
-      join_request_id: jr.id,
-      operator_address: jr.operator_address,
+      join_request_id: jr.id ?? '',
+      operator_address: jr.operator_address ?? '',
     };
     if (action === 'REJECT_VALIDATOR') {
       payloadObj.reason = reason.trim();
@@ -133,22 +161,15 @@ function ProposalForm({
       };
 
       const signed = await buildSignedAction(body, wallet, signingChainId, address);
-
-      const r = await authFetch(`/launch/${launchId}/proposal`, {
-        method: 'POST',
-        body: JSON.stringify(signed),
+      const proposal = await raiseProposal.mutateAsync({
+        id: launchId,
+        data: signed as unknown as ServicesRaiseInput,
       });
-
-      if (!r.ok) {
-        const envelope = await r.json().catch(() => ({}));
-        setError((envelope as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-
-      const proposal: Proposal = await r.json();
+      queryClient.invalidateQueries();
       onSuccess(proposal);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unexpected error');
+      const env = err as ApiErrorEnvelope;
+      setError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -228,47 +249,24 @@ interface JoinQueueSectionProps {
   address: string;
   wallet: StatefulWallet;
   signingChainId: string;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
-function JoinQueueSection({ launchId, hint, address, wallet, signingChainId, authFetch }: JoinQueueSectionProps) {
-  const [requests, setRequests] = useState<JoinRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+function JoinQueueSection({ launchId, hint, address, wallet, signingChainId }: JoinQueueSectionProps) {
+  const { data, isLoading, error } = useGetLaunchIdJoin(
+    launchId,
+    { per_page: 100 },
+    { query: { refetchInterval: 30_000 } },
+  );
+  const requests = data?.items ?? [];
 
   // active proposal form state: which (join request, action) is being raised
-  const [activeForm, setActiveForm] = useState<{ jr: JoinRequest; action: ActionKind } | null>(null);
+  const [activeForm, setActiveForm] = useState<{ jr: ApiJoinRequestJSON; action: ActionKind } | null>(null);
   // proposals raised this session, keyed by join request id
-  const [raisedProposals, setRaisedProposals] = useState<Record<string, Proposal>>({});
+  const [raisedProposals, setRaisedProposals] = useState<Record<string, ApiProposalJSON>>({});
 
-  const fetchQueue = useCallback(async () => {
-    try {
-      const r = await authFetch(`/launch/${launchId}/join?per_page=100`);
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setFetchError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-      const envelope = await r.json() as { items: JoinRequest[] };
-      setRequests((envelope.items ?? []).map((jr) => ({ ...jr, status: jr.status.toLowerCase() as JoinRequest['status'] })));
-      setFetchError(null);
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : 'Network error');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [launchId, authFetch]);
-
-  useEffect(() => {
-    fetchQueue();
-    const id = setInterval(fetchQueue, 30_000);
-    return () => clearInterval(id);
-  }, [fetchQueue]);
-
-  const handleProposalSuccess = (jr: JoinRequest, proposal: Proposal) => {
-    setRaisedProposals((prev) => ({ ...prev, [jr.id]: proposal }));
+  const handleProposalSuccess = (jr: ApiJoinRequestJSON, proposal: ApiProposalJSON) => {
+    setRaisedProposals((prev) => ({ ...prev, [jr.id ?? '']: proposal }));
     setActiveForm(null);
-    fetchQueue();
   };
 
   if (isLoading) {
@@ -279,10 +277,10 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId, aut
     );
   }
 
-  if (fetchError) {
+  if (error) {
     return (
       <PanelCard title="Join Request Queue">
-        <Text fontSize="$sm" color="$textDanger">{fetchError}</Text>
+        <Text fontSize="$sm" color="$textDanger">{error.error?.message ?? 'Network error'}</Text>
       </PanelCard>
     );
   }
@@ -299,14 +297,15 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId, aut
     <PanelCard title={`Join Request Queue (${requests.length})`}>
       <Box display="flex" flexDirection="column" gap="12px">
         {requests.map((jr) => {
-          const isPending = jr.status === 'pending';
-          const raised = raisedProposals[jr.id];
-          const isActiveApprove = activeForm?.jr.id === jr.id && activeForm.action === 'APPROVE_VALIDATOR';
-          const isActiveReject = activeForm?.jr.id === jr.id && activeForm.action === 'REJECT_VALIDATOR';
+          const jrId = jr.id ?? '';
+          const isPending = jr.status === 'PENDING';
+          const raised = raisedProposals[jrId];
+          const isActiveApprove = activeForm?.jr.id === jr.id && activeForm?.action === 'APPROVE_VALIDATOR';
+          const isActiveReject = activeForm?.jr.id === jr.id && activeForm?.action === 'REJECT_VALIDATOR';
 
           return (
             <Box
-              key={jr.id}
+              key={jrId}
               borderRadius="6px"
               border="1px solid"
               borderColor="$divider"
@@ -319,22 +318,22 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId, aut
               <Box display="flex" justifyContent="space-between" alignItems="flex-start">
                 <Box display="flex" flexDirection="column" gap="2px">
                   <Text fontSize="$xs" fontFamily="monospace">
-                    {truncate(jr.operator_address, 32)}
+                    {truncate(jr.operator_address ?? '', 32)}
                   </Text>
                   {jr.memo && (
                     <Text fontSize="$xs" color="$textSecondary">{jr.memo}</Text>
                   )}
                   <Text fontSize="$xs" color="$textSecondary">
-                    {new Date(jr.submitted_at).toLocaleString()} · {jr.peer_address}
+                    {new Date(jr.submitted_at ?? '').toLocaleString()} · {jr.peer_address}
                   </Text>
                 </Box>
-                <StatusBadge status={jr.status} />
+                <StatusBadge status={jr.status ?? ''} />
               </Box>
 
               {/* Session-raised proposal feedback */}
               {raised && (
                 <Text fontSize="$xs" color="$textSuccess">
-                  Proposal raised: {raised.action_type} · {raised.status} · ID {truncate(raised.id, 16)}
+                  Proposal raised: {raised.action_type} · {raised.status} · ID {truncate(raised.id ?? '', 16)}
                 </Text>
               )}
 
@@ -368,7 +367,6 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId, aut
                   signingChainId={signingChainId}
                   jr={jr}
                   action={activeForm!.action}
-                  authFetch={authFetch}
                   onSuccess={(p) => handleProposalSuccess(jr, p)}
                   onCancel={() => setActiveForm(null)}
                 />
@@ -389,7 +387,6 @@ interface ProposalListSectionProps {
   address: string;
   wallet: StatefulWallet;
   signingChainId: string;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
 function ProposalListSection({
@@ -398,40 +395,23 @@ function ProposalListSection({
   address,
   wallet,
   signingChainId,
-  authFetch,
 }: ProposalListSectionProps) {
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const { data, isLoading, error } = useGetLaunchIdProposals(
+    launchId,
+    { per_page: 100 },
+    { query: { refetchInterval: 30_000 } },
+  );
+  const proposals = data?.items ?? [];
+
   // signing state per proposal: null = idle, 'signing' = in flight, string = error
   const [signingState, setSigningState] = useState<Record<string, string | 'signing' | null>>({});
 
-  const fetchProposals = useCallback(async () => {
-    try {
-      const r = await authFetch(`/launch/${launchId}/proposals?per_page=100`);
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setFetchError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-      const envelope = await r.json() as { items: Proposal[] };
-      setProposals((envelope.items ?? []).map((p) => ({ ...p, status: p.status.toLowerCase() as Proposal['status'] })));
-      setFetchError(null);
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : 'Network error');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [launchId, authFetch]);
+  const signProposal = usePostLaunchIdProposalPropIdSign();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchProposals();
-    const id = setInterval(fetchProposals, 30_000);
-    return () => clearInterval(id);
-  }, [fetchProposals]);
-
-  const handleDecision = async (proposal: Proposal, decision: 'sign' | 'veto') => {
-    setSigningState((prev) => ({ ...prev, [proposal.id]: 'signing' }));
+  const handleDecision = async (proposal: ApiProposalJSON, decision: 'SIGN' | 'VETO') => {
+    const pid = proposal.id ?? '';
+    setSigningState((prev) => ({ ...prev, [pid]: 'signing' }));
     try {
       const body = {
         coordinator_address: address,
@@ -439,26 +419,18 @@ function ProposalListSection({
       };
       const signed = await buildSignedAction(body, wallet, signingChainId, address);
 
-      const r = await authFetch(`/launch/${launchId}/proposal/${proposal.id}/sign`, {
-        method: 'POST',
-        body: JSON.stringify(signed),
+      await signProposal.mutateAsync({
+        id: launchId,
+        propId: pid,
+        data: signed as unknown as ServicesSignInput,
       });
-
-      if (!r.ok) {
-        const envelope = await r.json().catch(() => ({}));
-        const msg = (envelope as { message?: string }).message ?? `Server returned ${r.status}`;
-        setSigningState((prev) => ({ ...prev, [proposal.id]: msg }));
-        return;
-      }
-
-      const updated: Proposal = await r.json();
-      const normalizedUpdated = { ...updated, status: updated.status.toLowerCase() as Proposal['status'] };
-      setProposals((prev) => prev.map((p) => (p.id === updated.id ? normalizedUpdated : p)));
-      setSigningState((prev) => ({ ...prev, [proposal.id]: null }));
+      queryClient.invalidateQueries();
+      setSigningState((prev) => ({ ...prev, [pid]: null }));
     } catch (err) {
+      const env = err as ApiErrorEnvelope;
       setSigningState((prev) => ({
         ...prev,
-        [proposal.id]: err instanceof Error ? err.message : 'Unexpected error',
+        [pid]: env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'),
       }));
     }
   };
@@ -471,10 +443,10 @@ function ProposalListSection({
     );
   }
 
-  if (fetchError) {
+  if (error) {
     return (
       <PanelCard title="Proposals">
-        <Text fontSize="$sm" color="$textDanger">{fetchError}</Text>
+        <Text fontSize="$sm" color="$textDanger">{error.error?.message ?? 'Network error'}</Text>
       </PanelCard>
     );
   }
@@ -488,25 +460,27 @@ function ProposalListSection({
   }
 
   const pendingFirst = [...proposals].sort((a, b) => {
-    if (a.status === 'pending' && b.status !== 'pending') return -1;
-    if (a.status !== 'pending' && b.status === 'pending') return 1;
-    return new Date(b.proposed_at).getTime() - new Date(a.proposed_at).getTime();
+    if (a.status === 'PENDING_SIGNATURES' && b.status !== 'PENDING_SIGNATURES') return -1;
+    if (a.status !== 'PENDING_SIGNATURES' && b.status === 'PENDING_SIGNATURES') return 1;
+    return new Date(b.proposed_at ?? '').getTime() - new Date(a.proposed_at ?? '').getTime();
   });
 
   return (
     <PanelCard title={`Proposals (${proposals.length})`}>
       <Box display="flex" flexDirection="column" gap="12px">
         {pendingFirst.map((p) => {
-          const myDecision = p.signatures.find((s) => s.coordinator_address === address);
-          const isPending = p.status === 'pending';
+          const pid = p.id ?? '';
+          const signatures = p.signatures ?? [];
+          const myDecision = signatures.find((s) => s.coordinator_address === address);
+          const isPending = p.status === 'PENDING_SIGNATURES';
           const canAct = isPending && !myDecision;
-          const state = signingState[p.id];
+          const state = signingState[pid];
           const isSigning = state === 'signing';
           const signError = typeof state === 'string' && state !== 'signing' ? state : null;
 
           return (
             <Box
-              key={p.id}
+              key={pid}
               borderRadius="6px"
               border="1px solid"
               borderColor="$divider"
@@ -519,26 +493,26 @@ function ProposalListSection({
               <Box display="flex" justifyContent="space-between" alignItems="flex-start">
                 <Box display="flex" flexDirection="column" gap="2px">
                   <Text fontSize="$sm" fontWeight="$semibold">
-                    {p.action_type.replace(/_/g, ' ')}
+                    {(p.action_type ?? '').replace(/_/g, ' ')}
                   </Text>
                   <Text fontSize="$xs" color="$textSecondary">
-                    Proposed by {truncate(p.proposed_by, 24)} · {new Date(p.proposed_at).toLocaleString()}
+                    Proposed by {truncate(p.proposed_by ?? '', 24)} · {new Date(p.proposed_at ?? '').toLocaleString()}
                   </Text>
                   {isPending && (
                     <Text fontSize="$xs" color="$textSecondary">
-                      Expires {new Date(p.ttl_expires).toLocaleString()}
+                      Expires {new Date(p.ttl_expires ?? '').toLocaleString()}
                     </Text>
                   )}
                 </Box>
-                <StatusBadge status={p.status} />
+                <StatusBadge status={p.status ?? ''} />
               </Box>
 
               {/* Signatures */}
-              {p.signatures.length > 0 && (
+              {signatures.length > 0 && (
                 <Box display="flex" flexDirection="column" gap="2px">
-                  {p.signatures.map((s) => (
+                  {signatures.map((s) => (
                     <Text key={s.coordinator_address} fontSize="$xs" color="$textSecondary">
-                      {s.decision === 'sign' ? '✓' : '✗'} {truncate(s.coordinator_address, 24)}
+                      {s.decision === 'SIGN' ? '✓' : '✗'} {truncate(s.coordinator_address ?? '', 24)}
                     </Text>
                   ))}
                 </Box>
@@ -546,8 +520,8 @@ function ProposalListSection({
 
               {/* My prior decision */}
               {myDecision && (
-                <Text fontSize="$xs" color={myDecision.decision === 'sign' ? '$textSuccess' : '$textDanger'}>
-                  You {myDecision.decision === 'sign' ? 'signed' : 'vetoed'} this proposal.
+                <Text fontSize="$xs" color={myDecision.decision === 'SIGN' ? '$textSuccess' : '$textDanger'}>
+                  You {myDecision.decision === 'SIGN' ? 'signed' : 'vetoed'} this proposal.
                 </Text>
               )}
 
@@ -556,7 +530,7 @@ function ProposalListSection({
                 <Box display="flex" gap="8px">
                   <Button
                     variant="primary"
-                    onClick={() => handleDecision(p, 'sign')}
+                    onClick={() => handleDecision(p, 'SIGN')}
                     isLoading={isSigning}
                     disabled={isSigning}
                   >
@@ -564,7 +538,7 @@ function ProposalListSection({
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => handleDecision(p, 'veto')}
+                    onClick={() => handleDecision(p, 'VETO')}
                     disabled={isSigning}
                   >
                     Veto
@@ -587,33 +561,34 @@ function ProposalListSection({
 
 interface CoordinatorActionsSectionProps {
   launchId: string;
-  launch: Launch;
+  launch: ApiLaunchJSON;
   isLead: boolean;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
-  onLaunchUpdated: (l: Launch) => void;
 }
 
 function CoordinatorActionsSection({
   launchId,
   launch,
   isLead,
-  authFetch,
-  onLaunchUpdated,
 }: CoordinatorActionsSectionProps) {
+  const queryClient = useQueryClient();
+
   // Open window
   const [openWindowBusy, setOpenWindowBusy] = useState(false);
   const [openWindowError, setOpenWindowError] = useState<string | null>(null);
+  const openWindow = usePostLaunchIdOpenWindow();
 
   // Cancel launch
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
+  const cancelLaunch = usePostLaunchIdCancel();
 
   // Monitor RPC
   const [monitorRPC, setMonitorRPC] = useState(launch.monitor_rpc_url ?? '');
   const [monitorRPCBusy, setMonitorRPCBusy] = useState(false);
   const [monitorRPCError, setMonitorRPCError] = useState<string | null>(null);
   const [monitorRPCSaved, setMonitorRPCSaved] = useState(false);
+  const patchLaunch = usePatchLaunchId();
 
   // Genesis upload
   const [genesisURL, setGenesisURL] = useState('');
@@ -628,16 +603,11 @@ function CoordinatorActionsSection({
     setOpenWindowBusy(true);
     setOpenWindowError(null);
     try {
-      const r = await authFetch(`/launch/${launchId}/open-window`, { method: 'POST' });
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setOpenWindowError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-      const updated: Launch = await r.json();
-      onLaunchUpdated(updated);
+      await openWindow.mutateAsync({ id: launchId });
+      queryClient.invalidateQueries();
     } catch (err) {
-      setOpenWindowError(err instanceof Error ? err.message : 'Unexpected error');
+      const env = err as ApiErrorEnvelope;
+      setOpenWindowError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
     } finally {
       setOpenWindowBusy(false);
     }
@@ -648,20 +618,15 @@ function CoordinatorActionsSection({
     setMonitorRPCError(null);
     setMonitorRPCSaved(false);
     try {
-      const r = await authFetch(`/launch/${launchId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ monitor_rpc_url: monitorRPC.trim() }),
+      await patchLaunch.mutateAsync({
+        id: launchId,
+        data: { monitor_rpc_url: monitorRPC.trim() },
       });
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setMonitorRPCError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-      const updated: Launch = await r.json();
-      onLaunchUpdated(updated);
+      queryClient.invalidateQueries();
       setMonitorRPCSaved(true);
     } catch (err) {
-      setMonitorRPCError(err instanceof Error ? err.message : 'Unexpected error');
+      const env = err as ApiErrorEnvelope;
+      setMonitorRPCError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
     } finally {
       setMonitorRPCBusy(false);
     }
@@ -671,17 +636,12 @@ function CoordinatorActionsSection({
     setCancelBusy(true);
     setCancelError(null);
     try {
-      const r = await authFetch(`/launch/${launchId}/cancel`, { method: 'POST' });
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setCancelError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-      const updated: Launch = await r.json();
-      onLaunchUpdated(updated);
+      await cancelLaunch.mutateAsync({ id: launchId });
+      queryClient.invalidateQueries();
       setCancelConfirm(false);
     } catch (err) {
-      setCancelError(err instanceof Error ? err.message : 'Unexpected error');
+      const env = err as ApiErrorEnvelope;
+      setCancelError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
     } finally {
       setCancelBusy(false);
     }
@@ -715,35 +675,32 @@ function CoordinatorActionsSection({
       };
       if (genesisType === 'final') body.genesis_time = genesisTime.trim();
 
-      const r = await authFetch(`/launch/${launchId}/genesis?type=${genesisType}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      // The generated usePostLaunchIdGenesis hook's mutateAsync shape is { id, params? } — it carries
+      // no request body. Call the imperative request function directly so we can attach the JSON body,
+      // then invalidate so [id].tsx refetches the launch (attestor mode: JSON { url, sha256, genesis_time? }).
+      await postLaunchIdGenesis(
+        launchId,
+        { type: genesisType },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
 
-      if (!r.ok) {
-        const envelope = await r.json().catch(() => ({}));
-        setGenesisError((envelope as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-
-      const result = await r.json().catch(() => ({})) as { sha256?: string };
+      queryClient.invalidateQueries();
       setGenesisSaved(true);
       setGenesisURL('');
       setGenesisSHA256('');
       setGenesisTime('');
-      if (result.sha256) {
-        const key = genesisType === 'final' ? 'final_genesis_sha256' : 'initial_genesis_sha256';
-        onLaunchUpdated({ ...launch, [key]: result.sha256 });
-      }
     } catch (err) {
-      setGenesisError(err instanceof Error ? err.message : 'Unexpected error');
+      const env = err as ApiErrorEnvelope;
+      setGenesisError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
     } finally {
       setGenesisBusy(false);
     }
   };
 
-  const isDraft = launch.status === 'draft';
+  const isDraft = launch.status === 'DRAFT';
 
   return (
     <PanelCard title="Coordinator Actions">
@@ -877,7 +834,7 @@ function CoordinatorActionsSection({
         </Box>
 
         {/* Cancel launch — lead only, non-terminal status */}
-        {isLead && launch.status !== 'launched' && launch.status !== 'canceled' && (
+        {isLead && launch.status !== 'LAUNCHED' && launch.status !== 'CANCELED' && (
           <Box display="flex" flexDirection="column" gap="8px">
             <Text fontSize="$sm" fontWeight="$semibold" color="$textDanger">Cancel Launch</Text>
             <Text fontSize="$xs" color="$textSecondary">
@@ -919,10 +876,9 @@ function CoordinatorActionsSection({
 
 interface GentxsSectionProps {
   launchId: string;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
-function GentxsSection({ launchId, authFetch }: GentxsSectionProps) {
+function GentxsSection({ launchId }: GentxsSectionProps) {
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -930,13 +886,7 @@ function GentxsSection({ launchId, authFetch }: GentxsSectionProps) {
     setIsBusy(true);
     setError(null);
     try {
-      const r = await authFetch(`/launch/${launchId}/gentxs`);
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-      const data = await r.json();
+      const data = await getLaunchIdGentxs(launchId);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -945,7 +895,8 @@ function GentxsSection({ launchId, authFetch }: GentxsSectionProps) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
+      const env = err as ApiErrorEnvelope;
+      setError(env.error?.message ?? (err instanceof Error ? err.message : 'Download failed'));
     } finally {
       setIsBusy(false);
     }
@@ -971,9 +922,7 @@ interface ReplaceCommitteeSectionProps {
   address: string;
   wallet: StatefulWallet;
   signingChainId: string;
-  committee: Committee;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
-  onCommitteeUpdated: (c: Committee) => void;
+  committee: ApiCommitteeJSON;
 }
 
 interface MemberInput {
@@ -988,14 +937,19 @@ function ReplaceCommitteeSection({
   wallet,
   signingChainId,
   committee,
-  authFetch,
-  onCommitteeUpdated,
 }: ReplaceCommitteeSectionProps) {
+  const queryClient = useQueryClient();
+  const replaceCommittee = usePostLaunchIdCommittee();
+
   const [open, setOpen] = useState(false);
-  const [thresholdM, setThresholdM] = useState(String(committee.threshold_m));
-  const [totalN, setTotalN] = useState(String(committee.total_n));
+  const [thresholdM, setThresholdM] = useState(String(committee.threshold_m ?? ''));
+  const [totalN, setTotalN] = useState(String(committee.total_n ?? ''));
   const [members, setMembers] = useState<MemberInput[]>(
-    committee.members.map((m) => ({ address: m.address, moniker: m.moniker, pubKeyB64: m.pub_key_b64 })),
+    (committee.members ?? []).map((m) => ({
+      address: m.address ?? '',
+      moniker: m.moniker ?? '',
+      pubKeyB64: m.pub_key_b64 ?? '',
+    })),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1053,9 +1007,9 @@ function ReplaceCommitteeSection({
         i === 0 ? { ...mb, pubKeyB64: stdSig.pub_key.value } : mb,
       );
 
-      const r = await authFetch(`/launch/${launchId}/committee`, {
-        method: 'POST',
-        body: JSON.stringify({
+      await replaceCommittee.mutateAsync({
+        id: launchId,
+        data: {
           members: finalMembers.map((mb) => ({
             address: mb.address.trim(),
             moniker: mb.moniker.trim(),
@@ -1065,21 +1019,15 @@ function ReplaceCommitteeSection({
           total_n: n,
           lead_address: address,
           creation_signature: stdSig.signature,
-        }),
+        },
       });
 
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-
-      const updated: Committee = await r.json();
-      onCommitteeUpdated(updated);
+      queryClient.invalidateQueries();
       setSuccess(true);
       setOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unexpected error');
+      const env = err as ApiErrorEnvelope;
+      setError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1192,12 +1140,9 @@ interface CoordinatorPanelProps {
   address: string;
   wallet: StatefulWallet;
   signingChainId: string;
-  launch: Launch;
-  committee: Committee;
+  launch: ApiLaunchJSON;
+  committee: ApiCommitteeJSON;
   isLead: boolean;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
-  onLaunchUpdated: (l: Launch) => void;
-  onCommitteeUpdated: (c: Committee) => void;
 }
 
 export function CoordinatorPanel({
@@ -1209,9 +1154,6 @@ export function CoordinatorPanel({
   launch,
   committee,
   isLead,
-  authFetch,
-  onLaunchUpdated,
-  onCommitteeUpdated,
 }: CoordinatorPanelProps) {
   return (
     <Box display="flex" flexDirection="column" gap="16px">
@@ -1219,19 +1161,15 @@ export function CoordinatorPanel({
         launchId={launchId}
         launch={launch}
         isLead={isLead}
-        authFetch={authFetch}
-        onLaunchUpdated={onLaunchUpdated}
       />
-      <GentxsSection launchId={launchId} authFetch={authFetch} />
-      {isLead && launch.status === 'draft' && (
+      <GentxsSection launchId={launchId} />
+      {isLead && launch.status === 'DRAFT' && (
         <ReplaceCommitteeSection
           launchId={launchId}
           address={address}
           wallet={wallet}
           signingChainId={signingChainId}
           committee={committee}
-          authFetch={authFetch}
-          onCommitteeUpdated={onCommitteeUpdated}
         />
       )}
       <JoinQueueSection
@@ -1240,7 +1178,6 @@ export function CoordinatorPanel({
         address={address}
         wallet={wallet}
         signingChainId={signingChainId}
-        authFetch={authFetch}
       />
       <ProposalListSection
         launchId={launchId}
@@ -1248,7 +1185,6 @@ export function CoordinatorPanel({
         address={address}
         wallet={wallet}
         signingChainId={signingChainId}
-        authFetch={authFetch}
       />
     </Box>
   );

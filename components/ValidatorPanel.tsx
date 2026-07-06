@@ -1,10 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Box, Text } from '@interchain-ui/react';
 import type { StatefulWallet } from '@interchain-kit/react/store/stateful-wallet';
 import { Button } from '@/components';
 import { buildSignedAction } from '@/utils/signedAction';
 import type { ChainHint } from '@/utils/chainSuggestion';
-import type { Launch, Dashboard, JoinRequest } from '@/types';
+import {
+  usePostLaunchIdJoin,
+  useGetLaunchIdJoinReqId,
+} from '@/api/generated/join-requests/join-requests';
+import {
+  usePostLaunchIdReady,
+  useGetLaunchIdPeers,
+} from '@/api/generated/readiness/readiness';
+import { authedFetch } from '@/api/authedFetch';
+import type {
+  ServicesSubmitInput,
+  ServicesConfirmInput,
+  ApiErrorEnvelope,
+  ApiInvariantResultJSON,
+  ApiLaunchJSON,
+  ApiDashboardJSON,
+} from '@/api/generated/model';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -117,10 +133,9 @@ interface JoinSectionProps {
   wallet: StatefulWallet;
   signingChainId: string;
   isApproved: boolean;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
-function JoinSection({ launchId, hint, address, wallet, signingChainId, isApproved, authFetch }: JoinSectionProps) {
+function JoinSection({ launchId, hint, address, wallet, signingChainId, isApproved }: JoinSectionProps) {
   // Form fields — all hooks must come before any conditional returns
   const [gentxRaw, setGentxRaw] = useState('');
   const [peerAddress, setPeerAddress] = useState('');
@@ -130,33 +145,17 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
   // State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [invariants, setInvariants] = useState<ApiInvariantResultJSON[] | null>(null);
   const [joinRequestId, setJoinRequestId] = useState<string | null>(null);
-  const [joinRequest, setJoinRequest] = useState<JoinRequest | null>(null);
-  const [pollError, setPollError] = useState<string | null>(null);
 
-  // H.4: poll for join request status once we have an ID
-  useEffect(() => {
-    if (!joinRequestId) return;
+  const submitJoin = usePostLaunchIdJoin();
 
-    const poll = async () => {
-      try {
-        const r = await authFetch(`/launch/${launchId}/join/${joinRequestId}`);
-        if (!r.ok) {
-          const body = await r.json().catch(() => ({}));
-          setPollError((body as { message?: string }).message ?? 'Failed to fetch status');
-          return;
-        }
-        const jr: JoinRequest = await r.json();
-        setJoinRequest(jr);
-      } catch (err) {
-        setPollError(err instanceof Error ? err.message : 'Network error');
-      }
-    };
-
-    poll();
-    const id = setInterval(poll, 15_000);
-    return () => clearInterval(id);
-  }, [joinRequestId, launchId, authFetch]);
+  // H.4: poll for the join request status once we have an id — react-query drives the interval + dedup.
+  const { data: joinRequest, error: pollError } = useGetLaunchIdJoinReqId(
+    launchId,
+    joinRequestId ?? '',
+    { query: { enabled: !!joinRequestId, refetchInterval: 15_000 } },
+  );
 
   // If validator is already approved via dashboard, just show the status card.
   if (isApproved) {
@@ -172,11 +171,11 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
   // H.4: show status after submit
   if (joinRequestId) {
     const statusColor: Record<string, string> = {
-      pending: '$textSecondary',
-      approved: '$textSuccess',
-      rejected: '$textDanger',
+      PENDING: '$textSecondary',
+      APPROVED: '$textSuccess',
+      REJECTED: '$textDanger',
     };
-    const status = joinRequest?.status ?? 'pending';
+    const status = (joinRequest?.status ?? 'PENDING').toUpperCase();
     return (
       <PanelCard title="Join Request Status">
         <Box display="flex" gap="8px" alignItems="center">
@@ -191,7 +190,9 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
           </Text>
         )}
         {pollError && (
-          <Text fontSize="$xs" color="$textDanger">{pollError}</Text>
+          <Text fontSize="$xs" color="$textDanger">
+            {pollError.error?.message ?? 'Failed to fetch status'}
+          </Text>
         )}
         <Text fontSize="$xs" color="$textSecondary">
           Request ID: {joinRequestId}
@@ -213,6 +214,7 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
 
   const handleSubmit = async () => {
     setSubmitError(null);
+    setInvariants(null);
 
     if (!peerAddress.trim()) {
       setSubmitError('Peer address is required.');
@@ -239,34 +241,30 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
       };
 
       const signed = await buildSignedAction(payload, wallet, signingChainId, address);
-
-      const r = await authFetch(`/launch/${launchId}/join`, {
-        method: 'POST',
-        body: JSON.stringify(signed),
+      const jr = await submitJoin.mutateAsync({
+        id: launchId,
+        data: signed as unknown as ServicesSubmitInput,
       });
-
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        const msg = (body as { message?: string }).message;
-        if (r.status === 409) {
-          setSubmitError(
-            'You already have a pending join request for this launch. Refresh the page — if you see the join form again, the request ID was lost (browser tab closed). Contact the coordinator with your operator address to check status.',
-          );
-        } else {
-          setSubmitError(msg ?? `Server returned ${r.status}`);
-        }
-        return;
-      }
-
-      const jr: JoinRequest = await r.json();
-      setJoinRequestId(jr.id);
-      setJoinRequest(jr);
+      setJoinRequestId(jr.id ?? null);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Unexpected error');
+      const env = err as ApiErrorEnvelope & { status?: number };
+      // Workstream C: a gentx_invalid 400 carries a per-invariant breakdown — surface the failed checks.
+      setInvariants(env.error?.invariants ?? null);
+      if (env.status === 409) {
+        setSubmitError(
+          'You already have a pending join request for this launch. Refresh the page — if you see the join form again, the request ID was lost (browser tab closed). Contact the coordinator with your operator address to check status.',
+        );
+      } else {
+        setSubmitError(
+          env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'),
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const failedInvariants = (invariants ?? []).filter((inv) => inv.ok === false);
 
   return (
     <PanelCard title="Submit Join Request">
@@ -325,6 +323,30 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
           </Text>
         )}
 
+        {/* advisory per-invariant breakdown for a gentx_invalid rejection. The server
+            stays authoritative; this just tells the validator which checks failed and why. */}
+        {failedInvariants.length > 0 && (
+          <Box
+            display="flex"
+            flexDirection="column"
+            gap="4px"
+            borderRadius="6px"
+            border="1px solid"
+            borderColor="$textDanger"
+            p="10px"
+          >
+            <Text fontSize="$xs" fontWeight="$semibold" color="$textDanger">
+              gentx validation failed:
+            </Text>
+            {failedInvariants.map((inv, i) => (
+              <Text key={inv.invariant ?? i} fontSize="$xs" color="$textDanger">
+                • {inv.invariant}
+                {inv.reason ? ` — ${inv.reason}` : ''}
+              </Text>
+            ))}
+          </Box>
+        )}
+
         <Button
           variant="primary"
           onClick={handleSubmit}
@@ -340,39 +362,26 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
 
 // ── Peer List ─────────────────────────────────────────────────────────────────
 
-interface PeerListSectionProps {
-  launchId: string;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
-}
-
-function PeerListSection({ launchId, authFetch }: PeerListSectionProps) {
-  const [peers, setPeers] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function PeerListSection({ launchId }: { launchId: string }) {
+  const [loadRequested, setLoadRequested] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const r = await authFetch(`/launch/${launchId}/peers?format=text`);
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-      const text = await r.text();
-      setPeers(text);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [launchId, authFetch]);
+  const { data, isLoading, isFetching, error, refetch } = useGetLaunchIdPeers(
+    launchId,
+    undefined,
+    { query: { enabled: loadRequested } },
+  );
+
+  // Build the persistent_peers string client-side from the JSON peer list (the endpoint's ?format=text
+  // convenience is no longer needed — the web formats it).
+  const persistentPeers = (data?.peers ?? [])
+    .map((p) => p.peer_address)
+    .filter(Boolean)
+    .join(',');
 
   const handleCopy = () => {
-    if (!peers) return;
-    navigator.clipboard.writeText(peers).then(() => {
+    if (!persistentPeers) return;
+    navigator.clipboard.writeText(persistentPeers).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -383,16 +392,20 @@ function PeerListSection({ launchId, authFetch }: PeerListSectionProps) {
       <Text fontSize="$xs" color="$textSecondary">
         Persistent peers for all approved validators. Paste into your node&apos;s <Text as="span" fontFamily="monospace" fontSize="$xs">persistent_peers</Text> config.
       </Text>
-      {!peers && !isLoading && (
-        <Button variant="outline" size="sm" onClick={load}>
+      {!loadRequested && (
+        <Button variant="outline" size="sm" onClick={() => setLoadRequested(true)}>
           Load Peers
         </Button>
       )}
-      {isLoading && <Text fontSize="$xs" color="$textSecondary">Loading…</Text>}
-      {error && <Text fontSize="$xs" color="$textDanger">{error}</Text>}
-      {peers !== null && (
+      {loadRequested && isLoading && <Text fontSize="$xs" color="$textSecondary">Loading…</Text>}
+      {error && (
+        <Text fontSize="$xs" color="$textDanger">
+          {error.error?.message ?? 'Failed to load peers'}
+        </Text>
+      )}
+      {loadRequested && !isLoading && !error && (
         <Box display="flex" flexDirection="column" gap="8px">
-          {peers === '' ? (
+          {persistentPeers === '' ? (
             <Text fontSize="$xs" color="$textSecondary">No approved peers yet.</Text>
           ) : (
             <>
@@ -403,13 +416,13 @@ function PeerListSection({ launchId, authFetch }: PeerListSectionProps) {
                 p="10px"
                 attributes={{ style: { wordBreak: 'break-all' } }}
               >
-                <Text fontSize="$xs" fontFamily="monospace">{peers}</Text>
+                <Text fontSize="$xs" fontFamily="monospace">{persistentPeers}</Text>
               </Box>
               <Box display="flex" gap="8px">
                 <Button variant="outline" size="sm" onClick={handleCopy}>
                   {copied ? 'Copied!' : 'Copy'}
                 </Button>
-                <Button variant="text" size="sm" onClick={load} isLoading={isLoading}>
+                <Button variant="text" size="sm" onClick={() => refetch()} isLoading={isFetching}>
                   Refresh
                 </Button>
               </Box>
@@ -423,13 +436,13 @@ function PeerListSection({ launchId, authFetch }: PeerListSectionProps) {
 
 // ── H.5 — Genesis Download + SHA-256 Verification ────────────────────────────
 
-interface GenesisSectionProps {
+function GenesisSection({
+  launchId,
+  finalGenesisSha256,
+}: {
   launchId: string;
   finalGenesisSha256: string;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
-}
-
-function GenesisSection({ launchId, finalGenesisSha256, authFetch }: GenesisSectionProps) {
+}) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [verifiedHash, setVerifiedHash] = useState<string | null>(null);
@@ -442,10 +455,10 @@ function GenesisSection({ launchId, finalGenesisSha256, authFetch }: GenesisSect
     setHashMatch(null);
 
     try {
-      const r = await authFetch(`/launch/${launchId}/genesis`);
+      const r = await authedFetch(`/launch/${launchId}/genesis`);
       if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setDownloadError((body as { message?: string }).message ?? `Server returned ${r.status}`);
+        const body = (await r.json().catch(() => ({}))) as ApiErrorEnvelope;
+        setDownloadError(body.error?.message ?? `Server returned ${r.status}`);
         return;
       }
 
@@ -469,7 +482,7 @@ function GenesisSection({ launchId, finalGenesisSha256, authFetch }: GenesisSect
     } finally {
       setIsDownloading(false);
     }
-  }, [launchId, finalGenesisSha256, authFetch]);
+  }, [launchId, finalGenesisSha256]);
 
   return (
     <PanelCard title="Genesis File">
@@ -523,7 +536,6 @@ interface ReadinessSectionProps {
   wallet: StatefulWallet;
   signingChainId: string;
   finalGenesisSha256: string;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
 function ReadinessSection({
@@ -533,12 +545,13 @@ function ReadinessSection({
   wallet,
   signingChainId,
   finalGenesisSha256,
-  authFetch,
 }: ReadinessSectionProps) {
   const [binaryHash, setBinaryHash] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+
+  const confirmReadiness = usePostLaunchIdReady();
 
   if (confirmed) {
     return (
@@ -567,21 +580,14 @@ function ReadinessSection({
       };
 
       const signed = await buildSignedAction(payload, wallet, signingChainId, address);
-
-      const r = await authFetch(`/launch/${launchId}/ready`, {
-        method: 'POST',
-        body: JSON.stringify(signed),
+      await confirmReadiness.mutateAsync({
+        id: launchId,
+        data: signed as unknown as ServicesConfirmInput,
       });
-
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        setError((body as { message?: string }).message ?? `Server returned ${r.status}`);
-        return;
-      }
-
       setConfirmed(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unexpected error');
+      const env = err as ApiErrorEnvelope;
+      setError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -639,9 +645,8 @@ interface ValidatorPanelProps {
   address: string;
   wallet: StatefulWallet;
   signingChainId: string;
-  launch: Launch;
-  dashboard: Dashboard | null;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
+  launch: ApiLaunchJSON;
+  dashboard: ApiDashboardJSON | null;
 }
 
 export function ValidatorPanel({
@@ -652,9 +657,8 @@ export function ValidatorPanel({
   signingChainId,
   launch,
   dashboard,
-  authFetch,
 }: ValidatorPanelProps) {
-  const myReadiness = dashboard?.validators.find((v) => v.operator_address === address);
+  const myReadiness = dashboard?.validators?.find((v) => v.operator_address === address);
   const isApproved = !!myReadiness;
   const isReady = myReadiness?.is_ready ?? false;
 
@@ -668,7 +672,6 @@ export function ValidatorPanel({
         wallet={wallet}
         signingChainId={signingChainId}
         isApproved={isApproved}
-        authFetch={authFetch}
       />
 
       {/* H.5 */}
@@ -676,7 +679,6 @@ export function ValidatorPanel({
         <GenesisSection
           launchId={launchId}
           finalGenesisSha256={launch.final_genesis_sha256}
-          authFetch={authFetch}
         />
       )}
 
@@ -689,7 +691,6 @@ export function ValidatorPanel({
           wallet={wallet}
           signingChainId={signingChainId}
           finalGenesisSha256={launch.final_genesis_sha256}
-          authFetch={authFetch}
         />
       )}
 
@@ -707,7 +708,7 @@ export function ValidatorPanel({
 
       {/* Peer list — available once approved */}
       {isApproved && (
-        <PeerListSection launchId={launchId} authFetch={authFetch} />
+        <PeerListSection launchId={launchId} />
       )}
     </Box>
   );

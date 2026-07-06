@@ -1,29 +1,31 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Box, Text } from '@interchain-ui/react';
 import { Button } from '@/components';
-import { useAuthFetch } from '@/hooks';
 import { useAuth } from '@/contexts';
-import { PageEnvelope } from '@/types';
-
-interface CoordinatorEntry {
-  address: string;
-  added_by: string;
-  added_at: string;
-}
+import {
+  useGetAdminCoordinators,
+  usePostAdminCoordinators,
+  useDeleteAdminCoordinatorsAddress,
+  useDeleteAdminSessionsAddress,
+} from '@/api/generated/admin/admin';
+import type { ApiErrorEnvelope } from '@/api/generated/model';
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
   const { isAuthenticated } = useAuth();
-  const { authFetch } = useAuthFetch();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) { setIsAdmin(false); return; }
-    authFetch('/admin/coordinators?page=1&per_page=1')
-      .then((r) => setIsAdmin(r.status !== 403))
-      .catch(() => setIsAdmin(false));
-  }, [isAuthenticated, authFetch]);
+  // A cheap probe: list one coordinator. 403 ⇒ not an admin. Don't retry the 403.
+  const probe = useGetAdminCoordinators(
+    { page: 1, per_page: 1 },
+    { query: { enabled: isAuthenticated, retry: false } },
+  );
+
+  const isAdmin: boolean | null = probe.isLoading
+    ? null
+    : probe.isError
+    ? (probe.error as ApiErrorEnvelope & { status?: number }).status !== 403
+    : true;
 
   if (!isAuthenticated) {
     return (
@@ -69,84 +71,62 @@ export default function AdminPage() {
 // ── Coordinator Allowlist ─────────────────────────────────────────────────────
 
 function CoordinatorAllowlistSection() {
-  const { authFetch } = useAuthFetch();
-  const [entries, setEntries] = useState<CoordinatorEntry[]>([]);
-  const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const { data, isLoading, error: listError, refetch } = useGetAdminCoordinators({
+    page: 1,
+    per_page: 100,
+  });
+  const entries = data?.items ?? [];
+  const total = data?.total ?? 0;
+
+  const addCoordinator = usePostAdminCoordinators();
+  const removeCoordinator = useDeleteAdminCoordinatorsAddress();
 
   const [newAddress, setNewAddress] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-
+  const [actionError, setActionError] = useState<string | null>(null);
   const [removingAddr, setRemovingAddr] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setFetchError(null);
-    try {
-      const r = await authFetch('/admin/coordinators?page=1&per_page=100');
-      if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.message ?? `fetch failed: ${r.status}`);
-      }
-      const data = await r.json() as PageEnvelope<CoordinatorEntry[]>;
-      setEntries(data.items ?? []);
-      setTotal(data.total);
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [authFetch]);
-
-  useEffect(() => { load(); }, [load]);
 
   async function handleAdd() {
     const addr = newAddress.trim();
     if (!addr) return;
-    setIsAdding(true);
     setAddError(null);
     try {
-      const r = await authFetch('/admin/coordinators', {
-        method: 'POST',
-        body: JSON.stringify({ address: addr }),
-      });
-      if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.message ?? `request failed: ${r.status}`);
-      }
+      await addCoordinator.mutateAsync({ data: { address: addr } });
       setNewAddress('');
-      await load();
+      refetch();
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsAdding(false);
+      const env = err as ApiErrorEnvelope;
+      setAddError(env.error?.message ?? (err instanceof Error ? err.message : String(err)));
     }
   }
 
   async function handleRemove(address: string) {
     setRemovingAddr(address);
+    setActionError(null);
     try {
-      const r = await authFetch(`/admin/coordinators/${encodeURIComponent(address)}`, {
-        method: 'DELETE',
-      });
-      if (!r.ok && r.status !== 404) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.message ?? `request failed: ${r.status}`);
-      }
-      await load();
+      await removeCoordinator.mutateAsync({ address });
     } catch (err) {
-      setFetchError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRemovingAddr(null);
+      // A 404 (already gone) is fine — fall through to refetch. Anything else surfaces.
+      const env = err as ApiErrorEnvelope & { status?: number };
+      if (env.status !== 404) {
+        setActionError(env.error?.message ?? (err instanceof Error ? err.message : String(err)));
+        setRemovingAddr(null);
+        return;
+      }
     }
+    refetch();
+    setRemovingAddr(null);
   }
 
   return (
     <AdminCard title={`Coordinator Allowlist${total > 0 ? ` (${total})` : ''}`}>
-      {fetchError && (
-        <Text fontSize="$xs" color="$textDanger" attributes={{ mb: '8px' }}>{fetchError}</Text>
+      {listError && (
+        <Text fontSize="$xs" color="$textDanger" attributes={{ mb: '8px' }}>
+          {listError.error?.message ?? 'Failed to load coordinators'}
+        </Text>
+      )}
+      {actionError && (
+        <Text fontSize="$xs" color="$textDanger" attributes={{ mb: '8px' }}>{actionError}</Text>
       )}
 
       {/* Add form */}
@@ -158,7 +138,13 @@ function CoordinatorAllowlistSection() {
           placeholder="cosmos1… address to add"
           style={inputStyle}
         />
-        <Button variant="primary" size="sm" onClick={handleAdd} isLoading={isAdding} disabled={isAdding}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleAdd}
+          isLoading={addCoordinator.isLoading}
+          disabled={addCoordinator.isLoading}
+        >
           Add
         </Button>
       </Box>
@@ -194,7 +180,7 @@ function CoordinatorAllowlistSection() {
               <Button
                 variant="text"
                 size="sm"
-                onClick={() => handleRemove(e.address)}
+                onClick={() => handleRemove(e.address ?? '')}
                 disabled={removingAddr === e.address}
               >
                 {removingAddr === e.address ? '…' : 'Remove'}
@@ -210,30 +196,24 @@ function CoordinatorAllowlistSection() {
 // ── Session Revocation ────────────────────────────────────────────────────────
 
 function SessionRevocationSection() {
-  const { authFetch } = useAuthFetch();
+  const revokeSessions = useDeleteAdminSessionsAddress();
   const [targetAddress, setTargetAddress] = useState('');
-  const [isRevoking, setIsRevoking] = useState(false);
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
   async function handleRevoke() {
     const addr = targetAddress.trim();
     if (!addr) return;
-    setIsRevoking(true);
     setMessage(null);
     try {
-      const r = await authFetch(`/admin/sessions/${encodeURIComponent(addr)}`, {
-        method: 'DELETE',
-      });
-      if (!r.ok) {
-        const b = await r.json().catch(() => ({}));
-        throw new Error(b.message ?? `request failed: ${r.status}`);
-      }
+      await revokeSessions.mutateAsync({ address: addr });
       setTargetAddress('');
       setMessage({ text: `Sessions revoked for ${addr}`, isError: false });
     } catch (err) {
-      setMessage({ text: err instanceof Error ? err.message : String(err), isError: true });
-    } finally {
-      setIsRevoking(false);
+      const env = err as ApiErrorEnvelope;
+      setMessage({
+        text: env.error?.message ?? (err instanceof Error ? err.message : String(err)),
+        isError: true,
+      });
     }
   }
 
@@ -254,8 +234,8 @@ function SessionRevocationSection() {
           variant="outline"
           size="sm"
           onClick={handleRevoke}
-          isLoading={isRevoking}
-          disabled={isRevoking || !targetAddress.trim()}
+          isLoading={revokeSessions.isLoading}
+          disabled={revokeSessions.isLoading || !targetAddress.trim()}
         >
           Revoke Sessions
         </Button>

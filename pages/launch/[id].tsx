@@ -5,10 +5,13 @@ import { useChain } from '@interchain-kit/react';
 import { Button } from '@/components';
 import { ValidatorPanel } from '@/components/ValidatorPanel';
 import { CoordinatorPanel } from '@/components/CoordinatorPanel';
-import { useAddChainToWallet, useAuthFetch } from '@/hooks';
+import { useAddChainToWallet } from '@/hooks';
 import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
-import { Launch, Committee, Dashboard, AuditEntry } from '@/types';
+import { useGetLaunchId } from '@/api/generated/launches/launches';
+import { useGetCommitteeLaunchId } from '@/api/generated/committee/committee';
+import { useGetLaunchIdDashboard } from '@/api/generated/readiness/readiness';
+import { useGetLaunchIdAudit } from '@/api/generated/audit/audit';
 
 // ── Top-level page ─────────────────────────────────────────────────────────────
 
@@ -148,14 +151,17 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
   const [revokeConfirm, setRevokeConfirm] = useState(false);
   const { wallet, chain } = useChain(chainName!);
   const signingChainId = chain.chainId as string;
-  const { authFetch } = useAuthFetch();
-
-  const [launch, setLaunch] = useState<Launch | null>(null);
-  const [committee, setCommittee] = useState<Committee | null>(null);
-  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [sseEvents, setSseEvents] = useState<string[]>([]);
+
+  // Launch / committee / dashboard via react-query — cached + deduped across the panels; a panel's
+  // mutation invalidates these query keys and every consumer refetches (no onUpdated callbacks needed).
+  const { data: launch, isLoading: launchLoading, error: launchError } = useGetLaunchId(launchId);
+  const { data: committee, isLoading: committeeLoading, error: committeeError } =
+    useGetCommitteeLaunchId(launchId);
+  const { data: dashboard } = useGetLaunchIdDashboard(launchId);
+
+  const isLoading = launchLoading || committeeLoading;
+  const error = launchError ?? committeeError;
 
   // Session controls are always rendered so they remain accessible even if the launch fails to load.
   const sessionControls = (
@@ -180,35 +186,6 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
       </Button>
     </Box>
   );
-
-  // ── Fetch launch + committee + dashboard in parallel ────────────────────────
-
-  useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-
-    Promise.all([
-      authFetch(`/launch/${launchId}`).then((r) => {
-        if (!r.ok) throw new Error(`Failed to load launch (${r.status})`);
-        return r.json() as Promise<Launch>;
-      }),
-      authFetch(`/committee/${launchId}`).then((r) => {
-        if (!r.ok) throw new Error(`Failed to load committee (${r.status})`);
-        return r.json() as Promise<Committee>;
-      }),
-      authFetch(`/launch/${launchId}/dashboard`).then((r) => {
-        if (!r.ok) throw new Error(`Failed to load dashboard (${r.status})`);
-        return r.json() as Promise<Dashboard>;
-      }),
-    ])
-      .then(([l, c, d]) => {
-        setLaunch({ ...l, status: l.status.toLowerCase() as Launch['status'] });
-        setCommittee(c);
-        setDashboard(d);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
-  }, [launchId, authFetch]);
 
   // ── SSE live feed ───────────────────────────────────────────────────────────
 
@@ -237,17 +214,16 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
   // ── Derived ─────────────────────────────────────────────────────────────────
 
   const address = operatorAddress!;
-  const isCoordinator =
-    (committee?.members ?? []).some((m) => m.address === address);
+  const isCoordinator = (committee?.members ?? []).some((m) => m.address === address);
   const isLead = committee?.lead_address === address;
 
-  // Build hint from fetched launch record (same shape, avoids a second fetch)
-  const hint: ChainHint | null = launch
+  // Build hint from the fetched launch record (same shape, avoids a second fetch)
+  const hint: ChainHint | null = launch?.record
     ? {
-        chain_id: launch.record.chain_id,
-        chain_name: launch.record.chain_name,
-        bech32_prefix: launch.record.bech32_prefix,
-        denom: launch.record.denom,
+        chain_id: launch.record.chain_id ?? '',
+        chain_name: launch.record.chain_name ?? '',
+        bech32_prefix: launch.record.bech32_prefix ?? '',
+        denom: launch.record.denom ?? '',
       }
     : null;
 
@@ -266,7 +242,9 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
     return (
       <Box display="flex" flexDirection="column" gap="16px">
         {sessionControls}
-        <Text color="$textDanger" fontSize="$sm">{error ?? 'Failed to load launch.'}</Text>
+        <Text color="$textDanger" fontSize="$sm">
+          {error?.error?.message ?? 'Failed to load launch.'}
+        </Text>
       </Box>
     );
   }
@@ -276,27 +254,29 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
       {/* ── Header ── */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start">
         <Box>
-          <Text fontSize="28px" fontWeight="600">{launch.record.chain_name}</Text>
+          <Text fontSize="28px" fontWeight="600">{launch.record?.chain_name}</Text>
           <Text fontSize="$sm" color="$textSecondary" fontFamily="monospace">
-            {launch.record.chain_id}
+            {launch.record?.chain_id}
           </Text>
         </Box>
         <Box display="flex" gap="8px" alignItems="center">
-          <StatusBadge status={launch.status} />
+          <StatusBadge status={launch.status ?? ''} />
           {sessionControls}
         </Box>
       </Box>
 
       {/* ── Metadata card ── */}
       <InfoCard title="Chain Details">
-        <InfoRow label="Binary" value={`${launch.record.binary_name} ${launch.record.binary_version}`} />
-        <InfoRow label="Denom" value={launch.record.denom} />
-        <InfoRow label="Min validators" value={String(launch.record.min_validator_count)} />
-        <InfoRow label="Gentx deadline" value={new Date(launch.record.gentx_deadline).toLocaleString()} />
-        {launch.record.genesis_time && (
+        <InfoRow label="Binary" value={`${launch.record?.binary_name ?? ''} ${launch.record?.binary_version ?? ''}`} />
+        <InfoRow label="Denom" value={launch.record?.denom ?? ''} />
+        <InfoRow label="Min validators" value={String(launch.record?.min_validator_count ?? '')} />
+        {launch.record?.gentx_deadline && (
+          <InfoRow label="Gentx deadline" value={new Date(launch.record.gentx_deadline).toLocaleString()} />
+        )}
+        {launch.record?.genesis_time && (
           <InfoRow label="Genesis time" value={new Date(launch.record.genesis_time).toLocaleString()} />
         )}
-        <InfoRow label="Type" value={`${launch.launch_type} · ${launch.visibility}`} />
+        <InfoRow label="Type" value={launch.launch_type ?? ''} />
         <InfoRow label="Role" value={isCoordinator ? 'Coordinator' : 'Validator'} />
         {launch.initial_genesis_sha256 && (
           <InfoRow label="Initial genesis SHA-256" value={launch.initial_genesis_sha256} mono />
@@ -308,11 +288,11 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
 
       {/* ── Committee card ── */}
       <InfoCard title={`Committee (${committee.threshold_m}/${committee.total_n})`}>
-        {committee.members.map((m) => (
+        {(committee.members ?? []).map((m) => (
           <InfoRow
             key={m.address}
             label={m.moniker || 'member'}
-            value={m.address}
+            value={m.address ?? ''}
             mono
           />
         ))}
@@ -321,10 +301,10 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
       {/* ── Dashboard card ── */}
       {dashboard && (
         <InfoCard title="Readiness Dashboard">
-          <InfoRow label="Approved validators" value={String(dashboard.total_approved)} />
-          <InfoRow label="Confirmed ready" value={`${dashboard.confirmed_ready} / ${dashboard.total_approved}`} />
-          <InfoRow label="Voting power confirmed" value={`${(dashboard.voting_power_confirmed * 100).toFixed(1)}%`} />
-          <InfoRow label="Threshold status" value={dashboard.threshold_status} />
+          <InfoRow label="Approved validators" value={String(dashboard.total_approved ?? 0)} />
+          <InfoRow label="Confirmed ready" value={`${dashboard.confirmed_ready ?? 0} / ${dashboard.total_approved ?? 0}`} />
+          <InfoRow label="Voting power confirmed" value={`${((dashboard.voting_power_confirmed ?? 0) * 100).toFixed(1)}%`} />
+          <InfoRow label="Threshold status" value={dashboard.threshold_status ?? ''} />
         </InfoCard>
       )}
 
@@ -339,9 +319,6 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
           launch={launch}
           committee={committee}
           isLead={isLead}
-          authFetch={authFetch}
-          onLaunchUpdated={(l) => setLaunch({ ...l, status: l.status.toLowerCase() as Launch['status'] })}
-          onCommitteeUpdated={setCommittee}
         />
       )}
       <ValidatorPanel
@@ -351,12 +328,11 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
         wallet={wallet!}
         signingChainId={signingChainId}
         launch={launch}
-        dashboard={dashboard}
-        authFetch={authFetch}
+        dashboard={dashboard ?? null}
       />
 
       {/* ── Audit log ── */}
-      <AuditLogSection launchId={launchId} authFetch={authFetch} />
+      <AuditLogSection launchId={launchId} />
 
       {/* ── Live event feed ── */}
       <InfoCard title="Live Events">
@@ -381,11 +357,12 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
 // ── Shared UI primitives ───────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
+  // Keys are coordd's on-the-wire status values (uppercase).
   const colorMap: Record<string, string> = {
-    open: '$textSuccess',
-    genesis_ready: '$textSuccess',
-    launched: '$purple600',
-    canceled: '$textDanger',
+    WINDOW_OPEN: '$textSuccess',
+    GENESIS_READY: '$textSuccess',
+    LAUNCHED: '$purple600',
+    CANCELED: '$textDanger',
   };
   return (
     <Text
@@ -434,60 +411,49 @@ function InfoRow({
 
 // ── Audit log section ─────────────────────────────────────────────────────────
 
-function AuditLogSection({
-  launchId,
-  authFetch,
-}: {
-  launchId: string;
-  authFetch: (url: string, init?: RequestInit) => Promise<Response>;
-}) {
+function AuditLogSection({ launchId }: { launchId: string }) {
   const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [loadRequested, setLoadRequested] = useState(false);
   const [pubkey, setPubkey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [auditRes, pubkeyRes] = await Promise.all([
-        authFetch(`/launch/${launchId}/audit`),
-        fetch(`${API_BASE}/audit/pubkey`),
-      ]);
-      if (!auditRes.ok) throw new Error(`audit fetch failed: ${auditRes.status}`);
-      const { entries: data } = await auditRes.json() as { entries: AuditEntry[] };
-      setEntries(data ?? []);
-      if (pubkeyRes.ok) {
-        const { public_key } = await pubkeyRes.json() as { public_key: string };
-        setPubkey(public_key);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
+  const { data, isLoading, error } = useGetLaunchIdAudit(launchId, {
+    query: { enabled: loadRequested },
+  });
+  const entries = data?.entries ?? null;
+
+  const handleLoad = () => {
+    setLoadRequested(true);
+    // The audit pubkey endpoint is public (no auth) — best-effort raw fetch.
+    fetch(`${API_BASE}/audit/pubkey`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.public_key) setPubkey(d.public_key);
+      })
+      .catch(() => {});
   };
 
   return (
     <InfoCard title="Audit Log">
-      {entries === null ? (
-        <Box display="flex" flexDirection="column" gap="8px">
-          <Button variant="outline" size="sm" onClick={load} isLoading={loading} disabled={loading}>
-            {loading ? 'Loading…' : 'Load Audit Log'}
-          </Button>
-          {error && <Text fontSize="$xs" color="$textDanger">{error}</Text>}
-        </Box>
+      {!loadRequested ? (
+        <Button variant="outline" size="sm" onClick={handleLoad}>
+          Load Audit Log
+        </Button>
+      ) : isLoading ? (
+        <Text fontSize="$xs" color="$textSecondary">Loading…</Text>
+      ) : error ? (
+        <Text fontSize="$xs" color="$textDanger">
+          {error.error?.message ?? 'Failed to load audit log'}
+        </Text>
       ) : (
         <Box display="flex" flexDirection="column" gap="8px">
           {pubkey && (
             <InfoRow label="Server audit pubkey" value={pubkey} mono />
           )}
-          {entries.length === 0 ? (
+          {(entries ?? []).length === 0 ? (
             <Text fontSize="$xs" color="$textSecondary">No audit entries yet.</Text>
           ) : (
-            entries.map((e, i) => (
+            (entries ?? []).map((e, i) => (
               <Box key={i} display="flex" flexDirection="column" gap="4px">
                 <Box
                   display="flex"
@@ -496,7 +462,7 @@ function AuditLogSection({
                   attributes={{ style: { cursor: 'pointer' }, onClick: () => setExpandedIdx(expandedIdx === i ? null : i) }}
                 >
                   <Text fontSize="$xs" color="$textSecondary" attributes={{ minWidth: '160px', flexShrink: '0' }}>
-                    {new Date(e.occurred_at).toLocaleString()}
+                    {e.occurred_at ? new Date(e.occurred_at).toLocaleString() : ''}
                   </Text>
                   <Text fontSize="$sm">{e.event_name}</Text>
                   <Text fontSize="$xs" color="$textSecondary">{expandedIdx === i ? '▲' : '▼'}</Text>

@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         if (!challengeRes.ok) {
           const body = await challengeRes.json().catch(() => ({}));
-          throw new Error(body.message ?? `challenge fetch failed: ${challengeRes.status}`);
+          throw new Error(body.error?.message ?? `challenge fetch failed: ${challengeRes.status}`);
         }
         const { challenge } = await challengeRes.json();
 
@@ -146,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         if (!verifyRes.ok) {
           const body = await verifyRes.json().catch(() => ({}));
-          throw new Error(body.message ?? `verification failed: ${verifyRes.status}`);
+          throw new Error(body.error?.message ?? `verification failed: ${verifyRes.status}`);
         }
         const { token: jwt } = await verifyRes.json();
 

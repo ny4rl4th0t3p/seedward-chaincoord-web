@@ -5,7 +5,8 @@ import { useChain } from '@interchain-kit/react';
 import { CosmosWallet } from '@interchain-kit/core';
 import { Button } from '@/components';
 import { useAuth } from '@/contexts';
-import { useAuthFetch } from '@/hooks';
+import { usePostLaunch } from '@/api/generated/launches/launches';
+import type { ApiCreateLaunchRequest, ApiErrorEnvelope } from '@/api/generated/model';
 import { buildCanonicalActionPayload } from '@/utils/signedAction';
 
 // ── Auth gate ─────────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
   const { operatorAddress } = useAuth();
   const { wallet, chain } = useChain(chainName);
   const signingChainId = chain.chainId as string;
-  const { authFetch } = useAuthFetch();
+  const createLaunch = usePostLaunch();
   const router = useRouter();
 
   // ── Chain record ─────────────────────────────────────────────────────────
@@ -53,14 +54,12 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
   const [maxCommissionRate, setMaxCommissionRate] = useState('0.20');
   const [maxCommissionChangeRate, setMaxCommissionChangeRate] = useState('0.01');
   const [gentxDeadline, setGentxDeadline] = useState('');
-  const [applicationWindowOpen, setApplicationWindowOpen] = useState('');
   const [genesisTime, setGenesisTime] = useState('');
   const [minValidatorCount, setMinValidatorCount] = useState('4');
 
   // ── Launch options ────────────────────────────────────────────────────────
 
   const [launchType, setLaunchType] = useState<'mainnet' | 'testnet' | 'devnet'>('mainnet');
-  const [visibility, setVisibility] = useState<'public' | 'allowlist'>('public');
   const [allowlistText, setAllowlistText] = useState('');
 
   // ── Committee ─────────────────────────────────────────────────────────────
@@ -155,16 +154,14 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
           : mb,
       );
 
-      // Build request body
-      const allowlist =
-        visibility === 'allowlist'
-          ? allowlistText
-              .split(/[\n,]+/)
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [];
+      // Initial members list — launches are private-always, so these addresses (plus the committee)
+      // are who may see the launch and submit. One address per line or comma-separated.
+      const allowlist = allowlistText
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
 
-      const body = {
+      const body: ApiCreateLaunchRequest = {
         record: {
           chain_id: chainId.trim(),
           chain_name: chainNameVal.trim() || chainId.trim(),
@@ -179,14 +176,10 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
           max_commission_rate: maxCommissionRate.trim() || '0.20',
           max_commission_change_rate: maxCommissionChangeRate.trim() || '0.01',
           gentx_deadline: localDatetimeToISO(gentxDeadline),
-          application_window_open: applicationWindowOpen
-            ? localDatetimeToISO(applicationWindowOpen)
-            : localDatetimeToISO(gentxDeadline),
           ...(genesisTime ? { genesis_time: localDatetimeToISO(genesisTime) } : {}),
           min_validator_count: Number(minValidatorCount),
         },
         launch_type: launchType.toUpperCase(),
-        visibility: visibility.toUpperCase(),
         allowlist,
         committee: {
           members: finalMembers.map((mb) => ({
@@ -201,20 +194,13 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
         },
       };
 
-      const res = await authFetch('/launch', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.message ?? `request failed: ${res.status}`);
-      }
-
-      const launch = await res.json();
+      const launch = await createLaunch.mutateAsync({ data: body });
       router.push(`/launch/${launch.id}`);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : String(err));
+      const envelope = err as ApiErrorEnvelope;
+      setSubmitError(
+        envelope?.error?.message ?? (err instanceof Error ? err.message : String(err)),
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -278,13 +264,6 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
               type="datetime-local"
             />
           </Field>
-          <Field label="Application Window Open">
-            <TextInput
-              value={applicationWindowOpen}
-              onChange={setApplicationWindowOpen}
-              type="datetime-local"
-            />
-          </Field>
         </Row>
         <Row>
           <Field label="Genesis Time (optional)">
@@ -342,44 +321,30 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
             ))}
           </Box>
         </Field>
-        <Field label="Visibility">
-          <Box display="flex" gap="16px">
-            {(['public', 'allowlist'] as const).map((v) => (
-              <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="visibility"
-                  value={v}
-                  checked={visibility === v}
-                  onChange={() => setVisibility(v)}
-                />
-                <Text fontSize="$sm">{v}</Text>
-              </label>
-            ))}
-          </Box>
+        <Field label="Initial Members (one address per line or comma-separated)">
+          <textarea
+            value={allowlistText}
+            onChange={(e) => setAllowlistText(e.target.value)}
+            rows={4}
+            placeholder="cosmos1abc…&#10;cosmos1def…"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: 6,
+              border: '1px solid var(--chakra-colors-divider, #e2e8f0)',
+              background: 'transparent',
+              color: 'inherit',
+              fontSize: 14,
+              fontFamily: 'inherit',
+              boxSizing: 'border-box',
+              resize: 'vertical',
+            }}
+          />
+          <Text fontSize="$xs" color="$textSecondary">
+            Launches are private — only the committee and these members can see the launch or submit a join
+            request. You can add or remove members later.
+          </Text>
         </Field>
-        {visibility === 'allowlist' && (
-          <Field label="Initial Allowlist (one address per line or comma-separated)">
-            <textarea
-              value={allowlistText}
-              onChange={(e) => setAllowlistText(e.target.value)}
-              rows={4}
-              placeholder="cosmos1abc…&#10;cosmos1def…"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                borderRadius: 6,
-                border: '1px solid var(--chakra-colors-divider, #e2e8f0)',
-                background: 'transparent',
-                color: 'inherit',
-                fontSize: 14,
-                fontFamily: 'inherit',
-                boxSizing: 'border-box',
-                resize: 'vertical',
-              }}
-            />
-          </Field>
-        )}
       </FormSection>
 
       {/* ── Committee ── */}

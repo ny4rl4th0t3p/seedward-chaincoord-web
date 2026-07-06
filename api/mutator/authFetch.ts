@@ -50,7 +50,9 @@ export const authFetchMutator = async <T>(
     const envelope = (await res
       .json()
       .catch(() => ({ error: { code: 'unknown', message: res.statusText } }))) as ApiErrorEnvelope;
-    throw envelope;
+    // Attach the HTTP status so call sites can branch on it (e.g. 409 vs 400) without losing it.
+    // orval still types the thrown value as ApiErrorEnvelope; read `.status` via a cast where needed.
+    throw Object.assign(envelope, { status: res.status });
   }
 
   // 204 No Content (and other empty bodies) → nothing to parse.
