@@ -12,6 +12,7 @@ import { useGetLaunchId } from '@/api/generated/launches/launches';
 import { useGetCommitteeLaunchId } from '@/api/generated/committee/committee';
 import { useGetLaunchIdDashboard } from '@/api/generated/readiness/readiness';
 import { useGetLaunchIdAudit } from '@/api/generated/audit/audit';
+import { useGetLaunchIdRehearsal } from '@/api/generated/rehearsal/rehearsal';
 
 // ── Top-level page ─────────────────────────────────────────────────────────────
 
@@ -308,6 +309,9 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
         </InfoCard>
       )}
 
+      {/* ── Rehearsal status ── committee-gated read; shown to coordinators only */}
+      {isCoordinator && <RehearsalStatusCard launchId={launchId} />}
+
       {/* ── Role panels ── coordinators see both so they can also participate as validators */}
       {isCoordinator && (
         <CoordinatorPanel
@@ -482,6 +486,64 @@ function AuditLogSection({ launchId }: { launchId: string }) {
             ))
           )}
         </Box>
+      )}
+    </InfoCard>
+  );
+}
+
+// ── Rehearsal status section ──────────────────────────────────────────────────
+// Committee-gated read (GET /launch/{id}/rehearsal) — advisory display of the latest rehearsal fact.
+// The backend gate is authoritative on freshness; the `stale` flag here is the value recorded with
+// the fact (a good proxy, but the live set may have drifted further since).
+
+function rehearsalOutcomeColor(outcome?: string): string {
+  switch (outcome) {
+    case 'PASS':
+      return '$textSuccess';
+    case 'FAIL':
+    case 'ERROR':
+      return '$textDanger';
+    default:
+      return '$textSecondary';
+  }
+}
+
+function RehearsalStatusCard({ launchId }: { launchId: string }) {
+  const { data, isLoading, error } = useGetLaunchIdRehearsal(launchId, {
+    query: { retry: false },
+  });
+  const latest = data?.[0];
+
+  return (
+    <InfoCard title="Rehearsal">
+      {isLoading ? (
+        <Text fontSize="$xs" color="$textSecondary">Loading…</Text>
+      ) : error || !latest ? (
+        <Text fontSize="$xs" color="$textSecondary">
+          No rehearsal has been run for this launch.
+        </Text>
+      ) : (
+        <>
+          <Box display="flex" gap="8px" alignItems="baseline">
+            <Text fontSize="$xs" color="$textSecondary" attributes={{ minWidth: '160px', flexShrink: '0' }}>
+              Latest outcome
+            </Text>
+            <Text fontSize="$sm" fontWeight="$semibold" color={rehearsalOutcomeColor(latest.outcome)}>
+              {latest.outcome ?? 'UNKNOWN'}
+              {latest.stale ? ' (stale)' : ''}
+            </Text>
+          </Box>
+          {latest.summary && <InfoRow label="Summary" value={latest.summary} />}
+          {latest.failed_step && <InfoRow label="Failed step" value={latest.failed_step} />}
+          {latest.recorded_at && (
+            <InfoRow label="Recorded" value={new Date(latest.recorded_at).toLocaleString()} />
+          )}
+          {latest.stale && (
+            <Text fontSize="$xs" color="$textDanger">
+              The approved set changed since this rehearsal — re-run before finalizing genesis.
+            </Text>
+          )}
+        </>
       )}
     </InfoCard>
   );
