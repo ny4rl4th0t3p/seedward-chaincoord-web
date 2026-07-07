@@ -16,6 +16,13 @@ export async function createLaunch(
     chainId?: string;
     bech32Prefix?: string;
     denom?: string;
+    /**
+     * Initial member addresses (the launch see-set beyond the committee). Launches are
+     * private-always in v1, and submitting a join request requires the submitter to already
+     * be a member (committee ∪ this allowlist) — so a validator must be listed here before
+     * it can read the launch or submit a gentx. See coordd joinrequest.go IsVisibleToAddr.
+     */
+    members?: string[];
   } = {},
 ): Promise<string> {
   await installWalletStub(page, coordinator());
@@ -38,6 +45,11 @@ export async function createLaunch(
   await page.getByPlaceholder('4', { exact: true }).fill('1');
   await page.locator('input[type="datetime-local"]').first().fill(future);
   await page.getByPlaceholder('Moniker (optional)').first().fill('lead');
+
+  // Initial Members textarea — grant see-set access to prospective validators (one per line).
+  if (opts.members?.length) {
+    await page.getByPlaceholder(/cosmos1abc/i).fill(opts.members.join('\n'));
+  }
 
   await page.getByRole('button', { name: /create launch/i }).click();
 

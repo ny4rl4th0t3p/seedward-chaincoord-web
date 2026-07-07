@@ -1,0 +1,63 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: # manual "Run workflow" button + `gh workflow run e2e.yml`
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    name: playwright (real coordd)
+    runs-on: ubuntu-latest
+    steps:
+      # The web app (this repo) at the workspace root.
+      - uses: actions/checkout@v4
+
+      # coordd lives in the sibling (public) repo; the e2e globalSetup runs its binary. Check it out + build.
+      - uses: actions/checkout@v4
+        with:
+          repository: ny4rl4th0t3p/seedward-chaincoord
+          path: seedward-chaincoord
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: seedward-chaincoord/go.mod
+
+      - name: Build coordd
+        working-directory: seedward-chaincoord
+        run: make build-server   # → bin/coordd (pure-Go sqlite, no CGO)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install web deps
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        # `yarn playwright` resolves to the package.json script (`playwright test`), so call the CLI
+        # directly for the browser install — otherwise it becomes `playwright test install …`.
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright
+        env:
+          # Absolute path to the coordd binary the globalSetup spawns (overrides the sibling default).
+          COORDD_BIN: ${{ github.workspace }}/seedward-chaincoord/bin/coordd
+        run: yarn playwright
+
+      - name: Upload Playwright artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-results
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
