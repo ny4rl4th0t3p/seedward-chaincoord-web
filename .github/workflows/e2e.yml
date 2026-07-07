@@ -40,6 +40,9 @@ jobs:
       - name: Install web deps
         run: yarn install --frozen-lockfile
 
+      - name: Vendor gentxvalidate WASM (advisory validator)
+        run: yarn sync:wasm   # pinned-release download — the same artifact path a live deploy uses
+
       - name: Install Playwright chromium
         # `yarn playwright` resolves to the package.json script (`playwright test`), so call the CLI
         # directly for the browser install — otherwise it becomes `playwright test install …`.

@@ -157,3 +157,6 @@ vite.config.ts.timestamp-*
 
 # OpenAPI: the vendored 2.0 spec (openapi/swagger.yaml) is committed; the 3.0 conversion is derived
 /openapi/openapi.json
+
+# gentxvalidate WASM validator: vendored via `yarn sync:wasm` from a pinned seedward-libs release
+/public/wasm/

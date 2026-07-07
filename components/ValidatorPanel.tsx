@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Box, Text } from '@interchain-ui/react';
 import type { StatefulWallet } from '@interchain-kit/react/store/stateful-wallet';
 import { Button } from '@/components';
 import { buildSignedAction } from '@/utils/signedAction';
 import type { ChainHint } from '@/utils/chainSuggestion';
+import { useGentxValidator, paramsFromRecord, type GentxParams } from '@/hooks/useGentxValidator';
 import {
   usePostLaunchIdJoin,
   useGetLaunchIdJoinReqId,
@@ -133,9 +134,10 @@ interface JoinSectionProps {
   wallet: StatefulWallet;
   signingChainId: string;
   isApproved: boolean;
+  params: GentxParams;
 }
 
-function JoinSection({ launchId, hint, address, wallet, signingChainId, isApproved }: JoinSectionProps) {
+function JoinSection({ launchId, hint, address, wallet, signingChainId, isApproved, params }: JoinSectionProps) {
   // Form fields — all hooks must come before any conditional returns
   const [gentxRaw, setGentxRaw] = useState('');
   const [peerAddress, setPeerAddress] = useState('');
@@ -156,6 +158,28 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
     joinRequestId ?? '',
     { query: { enabled: !!joinRequestId, refetchInterval: 15_000 } },
   );
+
+  // Advisory client-side gentx validation (WASM). Lazy-loads once the gentx field is non-empty; the
+  // server (incl. signature) stays authoritative on submit. Load failures degrade silently.
+  const gentxTrimmed = gentxRaw.trim();
+  const { validate: runLight, ready: validatorReady } = useGentxValidator(gentxTrimmed.length > 0);
+  const [advisory, setAdvisory] = useState<ApiInvariantResultJSON[] | null>(null);
+  useEffect(() => {
+    if (!validatorReady || !gentxTrimmed) {
+      setAdvisory(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      try {
+        JSON.parse(gentxTrimmed);
+      } catch {
+        setAdvisory(null); // let the existing "must be valid JSON" path handle malformed input
+        return;
+      }
+      setAdvisory(runLight(gentxTrimmed, params));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [gentxTrimmed, validatorReady, runLight, params]);
 
   // If validator is already approved via dashboard, just show the status card.
   if (isApproved) {
@@ -265,6 +289,7 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
   };
 
   const failedInvariants = (invariants ?? []).filter((inv) => inv.ok === false);
+  const advisoryFailed = (advisory ?? []).filter((inv) => inv.ok === false);
 
   return (
     <PanelCard title="Submit Join Request">
@@ -285,6 +310,33 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
             disabled={isSubmitting}
             rows={6}
           />
+          {/* Advisory client-side gentx checks (WASM). The server re-validates (incl. signature) on submit. */}
+          {advisory !== null &&
+            (advisoryFailed.length === 0 ? (
+              <Text fontSize="$xs" color="$textSuccess" attributes={{ marginTop: '6px' }}>
+                ✓ Passes local gentx checks (advisory — the server re-validates, including the signature, on submit).
+              </Text>
+            ) : (
+              <Box
+                display="flex"
+                flexDirection="column"
+                gap="4px"
+                borderRadius="6px"
+                border="1px solid"
+                borderColor="$textSecondary"
+                p="10px"
+              >
+                <Text fontSize="$xs" fontWeight="$semibold" color="$textSecondary">
+                  Advisory gentx checks (in your browser — the server is authoritative):
+                </Text>
+                {advisoryFailed.map((inv, i) => (
+                  <Text key={inv.invariant ?? i} fontSize="$xs" color="$textDanger">
+                    • {inv.invariant}
+                    {inv.reason ? ` — ${inv.reason}` : ''}
+                  </Text>
+                ))}
+              </Box>
+            ))}
         </Box>
 
         <Box>
@@ -661,6 +713,8 @@ export function ValidatorPanel({
   const myReadiness = dashboard?.validators?.find((v) => v.operator_address === address);
   const isApproved = !!myReadiness;
   const isReady = myReadiness?.is_ready ?? false;
+  // Stable identity so the advisory-validation effect doesn't re-run every render.
+  const params = useMemo(() => paramsFromRecord(launch.record), [launch.record]);
 
   return (
     <Box display="flex" flexDirection="column" gap="16px">
@@ -672,6 +726,7 @@ export function ValidatorPanel({
         wallet={wallet}
         signingChainId={signingChainId}
         isApproved={isApproved}
+        params={params}
       />
 
       {/* H.5 */}
