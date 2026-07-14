@@ -64,6 +64,7 @@ export * from './apiTokenResponse';
 export * from './apiValidatorReadinessJSON';
 export * from './getAdminCoordinatorsParams';
 export * from './getHealthz200';
+export * from './getHealthz503';
 export * from './getLaunchesParams';
 export * from './getLaunchIdJoinParams';
 export * from './getLaunchIdJoinStatus';

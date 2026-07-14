@@ -217,8 +217,8 @@ export const usePostBridgeLaunchesIdRehearsalClaim = <TError = ApiErrorEnvelope 
 
 /**
  * Returns the launch's approved rehearsal build input (chain + approved gentxs + approved
- * host-mode allocation files) plus input_set_hash. Ops-credential only. 422 if an approved
- * allocation is attestor-mode (run the rehearsal standalone instead).
+ * allocation files, host or attestor mode) plus input_set_hash. Ops-credential only. The
+ * daemon streams each allocation by reference (host bytes, or a 302 to the attestor URL).
  * @summary Rehearsal input (bridge)
  */
 export const getBridgeLaunchesIdRehearsalInput = async (id: string, options?: RequestInit): Promise<ApiRehearsalInputJSON> => {

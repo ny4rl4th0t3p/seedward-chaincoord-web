@@ -24,6 +24,7 @@ import type {
   ApiGentxsResponse,
   ApiJoinRequestJSON,
   ApiPageEnvelopeArrayApiJoinRequestJSON,
+  ApiSubmitterGroupJSON,
   GetLaunchIdJoinParams,
   ServicesSubmitInput
 } from '../model';
@@ -59,7 +60,7 @@ export const getGetLaunchIdGentxsUrl = (id: string,) => {
 }
 
 /**
- * Returns the gentx JSON for all approved join requests. Coordinator only.
+ * Returns the gentx JSON for all approved join requests. Committee members only.
  * @summary Download approved gentxs
  */
 export const getLaunchIdGentxs = async (id: string, options?: RequestInit): Promise<ApiGentxsResponse> => {
@@ -144,7 +145,7 @@ export const getGetLaunchIdJoinUrl = (id: string,
 }
 
 /**
- * Coordinator-only. Returns all join requests for a launch.
+ * Committee members only. Returns all join requests for a launch.
  * @summary List join requests
  */
 export const getLaunchIdJoin = async (id: string,
@@ -359,6 +360,84 @@ export function useGetLaunchIdJoinReqId<TData = Awaited<ReturnType<typeof getLau
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetLaunchIdJoinReqIdQueryOptions(id,reqId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetLaunchIdJoinGroupedUrl = (id: string,) => {
+
+
+
+
+  return `/launch/${id}/join/grouped`
+}
+
+/**
+ * Returns join requests grouped by the submitting hot actor, each group carrying the member label
+ * and per-actor aggregates (count, total self-delegation). Committee members only.
+ * @summary List join requests grouped by submitter
+ */
+export const getLaunchIdJoinGrouped = async (id: string, options?: RequestInit): Promise<ApiSubmitterGroupJSON[]> => {
+
+  return authFetchMutator<ApiSubmitterGroupJSON[]>(getGetLaunchIdJoinGroupedUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLaunchIdJoinGroupedQueryKey = (id: string,) => {
+    return [
+    `/launch/${id}/join/grouped`
+    ] as const;
+    }
+
+
+export const getGetLaunchIdJoinGroupedQueryOptions = <TData = Awaited<ReturnType<typeof getLaunchIdJoinGrouped>>, TError = ApiErrorEnvelope>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdJoinGrouped>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLaunchIdJoinGroupedQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLaunchIdJoinGrouped>>> = ({ signal }) => getLaunchIdJoinGrouped(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdJoinGrouped>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLaunchIdJoinGroupedQueryResult = NonNullable<Awaited<ReturnType<typeof getLaunchIdJoinGrouped>>>
+export type GetLaunchIdJoinGroupedQueryError = ApiErrorEnvelope
+
+
+/**
+ * @summary List join requests grouped by submitter
+ */
+
+export function useGetLaunchIdJoinGrouped<TData = Awaited<ReturnType<typeof getLaunchIdJoinGrouped>>, TError = ApiErrorEnvelope>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdJoinGrouped>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLaunchIdJoinGroupedQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

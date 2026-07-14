@@ -15,7 +15,7 @@ export interface ApiPatchLaunchRequest {
   min_validator_count?: number;
   monitor_rpc_url?: string;
   rehearsal_endpoint?: string;
-  /** Bridge D2 fields — operational, settable at any status. */
+  /** Bridge fields — operational, settable at any status. */
   rehearsal_service_pubkey?: string;
   repo_commit?: string;
   repo_url?: string;

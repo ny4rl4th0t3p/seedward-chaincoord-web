@@ -24,7 +24,7 @@ export interface ApiJoinRequestJSON {
   submitted_at?: string;
   /**
      * SubmitterAddress is the hot actor that signed the submission — the members-list key and
-     * the approval group key (M3). It may differ from OperatorAddress (an authorized uploader).
+     * the approval group key. It may differ from OperatorAddress (an authorized uploader).
      */
   submitter_address?: string;
 }

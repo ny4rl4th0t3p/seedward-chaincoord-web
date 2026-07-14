@@ -207,7 +207,8 @@ export const getPatchLaunchIdUrl = (id: string,) => {
 }
 
 /**
- * Partially updates mutable fields on a DRAFT launch. Coordinator only.
+ * Partially updates mutable fields on a launch (coordinator only). Most fields require
+ * DRAFT status; monitor_rpc_url and the rehearsal bridge fields are settable at any status.
  * @summary Update a launch
  */
 export const patchLaunchId = async (id: string,
@@ -351,7 +352,8 @@ export const usePostLaunchIdCancel = <TError = ApiErrorEnvelope,
 }
 
 /**
- * Returns chain_id, chain_name, bech32_prefix, and denom. No authentication required.
+ * Returns chain_id, chain_name, bech32_prefix, and denom. Visible only to a launch member
+ * (committee ∪ allowlist); non-members get 404.
  * @summary Chain hint
  */
 export const getLaunchIdChainHint = async (id: string, options?: RequestInit): Promise<ApiChainHintJSON> => {

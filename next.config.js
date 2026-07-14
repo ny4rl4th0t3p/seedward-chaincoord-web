@@ -10,6 +10,8 @@ const API_URL = process.env.COORD_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL
 module.exports = {
   reactStrictMode: true,
   swcMinify: true,
+  // Minimal self-contained server output for the Docker image (see Dockerfile).
+  output: 'standalone',
   async rewrites() {
     // Use fallback so Next.js dynamic page routes (e.g. /launch/[id]) are served
     // by the React app on direct navigation; sub-paths like /launch/:id/audit are

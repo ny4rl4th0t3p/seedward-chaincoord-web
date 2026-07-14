@@ -16,7 +16,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  GetHealthz200
+  GetHealthz200,
+  GetHealthz503
 } from '../model';
 
 import { authFetchMutator } from '../../mutator/authFetch';
@@ -74,7 +75,7 @@ export const getGetHealthzQueryKey = () => {
     }
 
 
-export const getGetHealthzQueryOptions = <TData = Awaited<ReturnType<typeof getHealthz>>, TError = unknown>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHealthz>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+export const getGetHealthzQueryOptions = <TData = Awaited<ReturnType<typeof getHealthz>>, TError = GetHealthz503>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHealthz>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -93,14 +94,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetHealthzQueryResult = NonNullable<Awaited<ReturnType<typeof getHealthz>>>
-export type GetHealthzQueryError = unknown
+export type GetHealthzQueryError = GetHealthz503
 
 
 /**
  * @summary Health check
  */
 
-export function useGetHealthz<TData = Awaited<ReturnType<typeof getHealthz>>, TError = unknown>(
+export function useGetHealthz<TData = Awaited<ReturnType<typeof getHealthz>>, TError = GetHealthz503>(
   options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHealthz>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
