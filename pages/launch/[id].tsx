@@ -6,13 +6,13 @@ import { Button } from '@/components';
 import { ValidatorPanel } from '@/components/ValidatorPanel';
 import { CommitteePanel } from '@/components/CommitteePanel';
 import { RehearsalResetButton } from '@/components/RehearsalResetButton';
+import { AuditLogSection } from '@/components/AuditLogSection';
 import { useAddChainToWallet } from '@/hooks';
 import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
 import { useGetLaunchId } from '@/api/generated/launches/launches';
 import { useGetCommitteeLaunchId } from '@/api/generated/committee/committee';
 import { useGetLaunchIdDashboard } from '@/api/generated/readiness/readiness';
-import { useGetAuditPubkey, useGetLaunchIdAudit } from '@/api/generated/audit/audit';
 import { useGetLaunchIdRehearsal } from '@/api/generated/rehearsal/rehearsal';
 
 // ── Top-level page ─────────────────────────────────────────────────────────────
@@ -414,81 +414,7 @@ function InfoRow({
   );
 }
 
-// ── Audit log section ─────────────────────────────────────────────────────────
-
-function AuditLogSection({ launchId }: { launchId: string }) {
-  const [loadRequested, setLoadRequested] = useState(false);
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-
-  const { data, isLoading, error } = useGetLaunchIdAudit(launchId, {
-    query: { enabled: loadRequested },
-  });
-  const entries = data?.entries ?? null;
-
-  // Best-effort: a failure here just hides the pubkey row and never blocks the audit entries
-  // above (separate query, error ignored). Auth is carried by the shared mutator.
-  const { data: pubkeyData } = useGetAuditPubkey({
-    query: { enabled: loadRequested },
-  });
-  const pubkey = pubkeyData?.public_key ?? null;
-
-  const handleLoad = () => {
-    setLoadRequested(true);
-  };
-
-  return (
-    <InfoCard title="Audit Log">
-      {!loadRequested ? (
-        <Button variant="outline" size="sm" onClick={handleLoad}>
-          Load Audit Log
-        </Button>
-      ) : isLoading ? (
-        <Text fontSize="$xs" color="$textSecondary">Loading…</Text>
-      ) : error ? (
-        <Text fontSize="$xs" color="$textDanger">
-          {error.error?.message ?? 'Failed to load audit log'}
-        </Text>
-      ) : (
-        <Box display="flex" flexDirection="column" gap="8px">
-          {pubkey && (
-            <InfoRow label="Server audit pubkey" value={pubkey} mono />
-          )}
-          {(entries ?? []).length === 0 ? (
-            <Text fontSize="$xs" color="$textSecondary">No audit entries yet.</Text>
-          ) : (
-            (entries ?? []).map((e, i) => (
-              <Box key={i} display="flex" flexDirection="column" gap="4px">
-                <Box
-                  display="flex"
-                  gap="8px"
-                  alignItems="baseline"
-                  attributes={{ style: { cursor: 'pointer' }, onClick: () => setExpandedIdx(expandedIdx === i ? null : i) }}
-                >
-                  <Text fontSize="$xs" color="$textSecondary" attributes={{ minWidth: '160px', flexShrink: '0' }}>
-                    {e.occurred_at ? new Date(e.occurred_at).toLocaleString() : ''}
-                  </Text>
-                  <Text fontSize="$sm">{e.event_name}</Text>
-                  <Text fontSize="$xs" color="$textSecondary">{expandedIdx === i ? '▲' : '▼'}</Text>
-                </Box>
-                {expandedIdx === i && (
-                  <Box
-                    borderRadius="4px"
-                    p="8px"
-                    attributes={{ style: { background: 'var(--chakra-colors-gray-50, #f7f7f7)', overflowX: 'auto' } }}
-                  >
-                    <Text fontSize="$xs" fontFamily="monospace">
-                      {JSON.stringify(e.payload, null, 2)}
-                    </Text>
-                  </Box>
-                )}
-              </Box>
-            ))
-          )}
-        </Box>
-      )}
-    </InfoCard>
-  );
-}
+// AuditLogSection was extracted to components/AuditLogSection.tsx (testable in isolation).
 
 // ── Rehearsal status section ──────────────────────────────────────────────────
 // Committee-gated read (GET /launch/{id}/rehearsal) — advisory display of the latest rehearsal fact.

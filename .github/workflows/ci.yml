@@ -32,8 +32,20 @@ jobs:
       - name: Lint
         run: yarn lint
 
-      - name: Unit tests
-        run: yarn test
+      # Prints the coverage table to the job log (text reporter) and fails if any metric drops
+      # below the ratchet floor in jest.config.js (coverageThreshold).
+      - name: Unit tests + coverage gate
+        run: yarn test:coverage
+
+      # Persist the full report (lcov HTML + coverage-summary.json) as a downloadable artifact,
+      # even when the gate fails, so the numbers are inspectable after the run.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
 
       # The API client is generated from the vendored OpenAPI spec (openapi/swagger.yaml).
       # Regenerate and fail if the committed client under api/generated has drifted.
