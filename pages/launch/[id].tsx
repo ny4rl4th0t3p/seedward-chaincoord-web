@@ -4,7 +4,7 @@ import { Box, Text } from '@interchain-ui/react';
 import { useChain } from '@interchain-kit/react';
 import { Button } from '@/components';
 import { ValidatorPanel } from '@/components/ValidatorPanel';
-import { CoordinatorPanel } from '@/components/CoordinatorPanel';
+import { CommitteePanel } from '@/components/CommitteePanel';
 import { useAddChainToWallet } from '@/hooks';
 import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
@@ -53,10 +53,10 @@ function UnauthenticatedLanding({ launchId }: { launchId: string }) {
               maxWidth="400px"
             >
               <Text fontSize="$sm" fontWeight="$semibold" attributes={{ mb: '4px' }}>
-                Coordinator or returning user
+                Committee member or validator
               </Text>
               <Text fontSize="$xs" color="$textSecondary">
-                Use the Sign In button in the header to authenticate with your coordinator wallet.
+                Use the Sign In button in the header to authenticate with your wallet.
               </Text>
             </Box>
             <Box
@@ -215,7 +215,7 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
   // ── Derived ─────────────────────────────────────────────────────────────────
 
   const address = operatorAddress!;
-  const isCoordinator = (committee?.members ?? []).some((m) => m.address === address);
+  const isCommitteeMember = (committee?.members ?? []).some((m) => m.address === address);
   const isLead = committee?.lead_address === address;
 
   // Build hint from the fetched launch record (same shape, avoids a second fetch)
@@ -278,7 +278,7 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
           <InfoRow label="Genesis time" value={new Date(launch.record.genesis_time).toLocaleString()} />
         )}
         <InfoRow label="Type" value={launch.launch_type ?? ''} />
-        <InfoRow label="Role" value={isCoordinator ? 'Coordinator' : 'Validator'} />
+        <InfoRow label="Role" value={isCommitteeMember ? 'Committee member' : 'Validator'} />
         {launch.initial_genesis_sha256 && (
           <InfoRow label="Initial genesis SHA-256" value={launch.initial_genesis_sha256} mono />
         )}
@@ -309,12 +309,12 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
         </InfoCard>
       )}
 
-      {/* ── Rehearsal status ── committee-gated read; shown to coordinators only */}
-      {isCoordinator && <RehearsalStatusCard launchId={launchId} />}
+      {/* ── Rehearsal status ── committee-gated read; shown to committee members only */}
+      {isCommitteeMember && <RehearsalStatusCard launchId={launchId} />}
 
-      {/* ── Role panels ── coordinators see both so they can also participate as validators */}
-      {isCoordinator && (
-        <CoordinatorPanel
+      {/* ── Role panels ── committee members see both so they can also participate as validators */}
+      {isCommitteeMember && (
+        <CommitteePanel
           launchId={launchId}
           hint={hint}
           address={address}

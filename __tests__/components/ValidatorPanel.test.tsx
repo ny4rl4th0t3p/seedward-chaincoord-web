@@ -567,7 +567,7 @@ describe('ValidatorPanel — ReadinessSection (H.6)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Readiness confirmed — the coordinator/)).toBeInTheDocument();
+      expect(screen.getByText(/Readiness confirmed — the committee/)).toBeInTheDocument();
     });
     expect(screen.queryByRole('button', { name: /Confirm Readiness/ })).not.toBeInTheDocument();
   });

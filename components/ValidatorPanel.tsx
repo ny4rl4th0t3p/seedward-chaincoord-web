@@ -276,7 +276,7 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
       setInvariants(env.error?.invariants ?? null);
       if (env.status === 409) {
         setSubmitError(
-          'You already have a pending join request for this launch. Refresh the page — if you see the join form again, the request ID was lost (browser tab closed). Contact the coordinator with your operator address to check status.',
+          'You already have a pending join request for this launch. Refresh the page — if you see the join form again, the request ID was lost (browser tab closed). Contact the committee with your operator address to check status.',
         );
       } else {
         setSubmitError(
@@ -609,7 +609,7 @@ function ReadinessSection({
     return (
       <PanelCard title="Readiness Confirmation">
         <Text fontSize="$sm" color="$textSuccess">
-          Readiness confirmed — the coordinator will see your confirmation in the dashboard.
+          Readiness confirmed — the committee will see your confirmation in the dashboard.
         </Text>
       </PanelCard>
     );
@@ -654,7 +654,7 @@ function ReadinessSection({
         </Text>
 
         <Box>
-          <FieldLabel>Genesis SHA-256 (pre-filled from coordinator)</FieldLabel>
+          <FieldLabel>Genesis SHA-256 (pre-filled from committee)</FieldLabel>
           <TextInput
             value={finalGenesisSha256}
             onChange={() => {}}

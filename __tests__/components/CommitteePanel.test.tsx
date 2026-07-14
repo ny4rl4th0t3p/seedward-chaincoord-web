@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { CoordinatorPanel } from '@/components/CoordinatorPanel';
+import { CommitteePanel } from '@/components/CommitteePanel';
 import { buildSignedAction } from '@/utils/signedAction';
 import type {
   ApiLaunchJSON,
@@ -211,7 +211,7 @@ function mockSignedResult() {
 
 // ── H.7 — Join queue ──────────────────────────────────────────────────────────
 
-describe('CoordinatorPanel — JoinQueueSection (H.7)', () => {
+describe('CommitteePanel — JoinQueueSection (H.7)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSignedResult();
@@ -219,7 +219,7 @@ describe('CoordinatorPanel — JoinQueueSection (H.7)', () => {
 
   it('shows the empty state when there are no join requests', async () => {
     mockFetch(listRoutes());
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/No join requests yet/)).toBeInTheDocument();
     });
@@ -228,7 +228,7 @@ describe('CoordinatorPanel — JoinQueueSection (H.7)', () => {
   it('renders operator + memo and Approve/Reject for a PENDING request', async () => {
     const jr = makeJoinRequest({ memo: 'fast-node', status: 'PENDING' });
     mockFetch(listRoutes({ joinItems: [jr] }));
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/fast-node/)).toBeInTheDocument();
     });
@@ -239,7 +239,7 @@ describe('CoordinatorPanel — JoinQueueSection (H.7)', () => {
 
   it('shows no action buttons for an APPROVED request', async () => {
     mockFetch(listRoutes({ joinItems: [makeJoinRequest({ status: 'APPROVED' })] }));
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/my node/)).toBeInTheDocument();
     });
@@ -252,7 +252,7 @@ describe('CoordinatorPanel — JoinQueueSection (H.7)', () => {
       { method: 'GET', match: '/proposals', body: { items: [] } },
       { method: 'GET', match: '/join', status: 500, body: envelope('internal error') },
     ]);
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText('internal error')).toBeInTheDocument();
     });
@@ -261,7 +261,7 @@ describe('CoordinatorPanel — JoinQueueSection (H.7)', () => {
 
 // ── H.8 — Raise proposal ──────────────────────────────────────────────────────
 
-describe('CoordinatorPanel — ProposalForm (H.8)', () => {
+describe('CommitteePanel — ProposalForm (H.8)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSignedResult();
@@ -269,7 +269,7 @@ describe('CoordinatorPanel — ProposalForm (H.8)', () => {
 
   async function openApproveForm(routes: Route[]) {
     mockFetch(routes);
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Approve' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
@@ -283,7 +283,7 @@ describe('CoordinatorPanel — ProposalForm (H.8)', () => {
 
   it('shows the reason field for Reject but not for Approve', async () => {
     mockFetch(listRoutes({ joinItems: [makeJoinRequest()] }));
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Reject' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
@@ -355,7 +355,7 @@ describe('CoordinatorPanel — ProposalForm (H.8)', () => {
 
 // ── H.9 — Proposal list + sign/veto ──────────────────────────────────────────
 
-describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
+describe('CommitteePanel — ProposalListSection (H.9)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSignedResult();
@@ -363,7 +363,7 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
 
   it('shows the empty state when there are no proposals', async () => {
     mockFetch(listRoutes());
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/No proposals yet/)).toBeInTheDocument();
     });
@@ -371,7 +371,7 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
 
   it('renders the action type + PENDING_SIGNATURES status and Sign/Veto buttons', async () => {
     mockFetch(listRoutes({ proposalItems: [makeProposal({ signatures: [] })] }));
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText('APPROVE VALIDATOR')).toBeInTheDocument();
     });
@@ -385,7 +385,7 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
       signatures: [{ coordinator_address: OTHER_COORD, decision: 'SIGN', timestamp: '2026-05-01T00:00:00Z' }],
     });
     mockFetch(listRoutes({ proposalItems: [proposal] }));
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/✓/)).toBeInTheDocument();
     });
@@ -398,7 +398,7 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
       signatures: [{ coordinator_address: ADDRESS, decision: 'SIGN', timestamp: '2026-05-01T00:00:00Z' }],
     });
     mockFetch(listRoutes({ proposalItems: [proposal] }));
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText(/You signed this proposal/)).toBeInTheDocument();
     });
@@ -408,7 +408,7 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
 
   it('hides Sign/Veto for an EXECUTED proposal', async () => {
     mockFetch(listRoutes({ proposalItems: [makeProposal({ status: 'EXECUTED' })] }));
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => {
       expect(screen.getByText('EXECUTED')).toBeInTheDocument();
     });
@@ -420,7 +420,7 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
       { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign`, body: makeProposal() },
       ...listRoutes({ proposalItems: [makeProposal()] }),
     ]);
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Sign' }));
 
     await act(async () => {
@@ -442,7 +442,7 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
       { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign`, body: makeProposal({ status: 'VETOED' }) },
       ...listRoutes({ proposalItems: [makeProposal()] }),
     ]);
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Veto' }));
 
     await act(async () => {
@@ -461,7 +461,7 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
       { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal/${PROP_ID}/sign`, status: 409, body: envelope('already signed') },
       ...listRoutes({ proposalItems: [makeProposal()] }),
     ]);
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: 'Sign' }));
 
     await act(async () => {
@@ -474,9 +474,9 @@ describe('CoordinatorPanel — ProposalListSection (H.9)', () => {
   });
 });
 
-// ── H.10 — Coordinator actions ────────────────────────────────────────────────
+// ── H.10 — Committee actions ────────────────────────────────────────────────
 
-describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
+describe('CommitteePanel — CommitteeActionsSection (H.10)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSignedResult();
@@ -484,7 +484,7 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
 
   it('shows Open Application Window on a DRAFT launch', async () => {
     mockFetch(listRoutes());
-    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
+    renderWithClient(<CommitteePanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Open Application Window/ })).toBeInTheDocument();
     });
@@ -492,7 +492,7 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
 
   it('hides Open Application Window on a non-DRAFT launch', async () => {
     mockFetch(listRoutes());
-    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { status: 'WINDOW_OPEN' } })} />);
+    renderWithClient(<CommitteePanel {...defaultProps({ launch: { status: 'WINDOW_OPEN' } })} />);
     await waitFor(() => screen.getByRole('button', { name: /Set Monitor RPC/ }));
     expect(screen.queryByRole('button', { name: /Open Application Window/ })).not.toBeInTheDocument();
   });
@@ -502,7 +502,7 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
       { method: 'POST', match: `/launch/${LAUNCH_ID}/open-window`, body: {} },
       ...listRoutes(),
     ]);
-    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
+    renderWithClient(<CommitteePanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
     await waitFor(() => screen.getByRole('button', { name: /Open Application Window/ }));
 
     await act(async () => {
@@ -520,7 +520,7 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
       { method: 'POST', match: `/launch/${LAUNCH_ID}/open-window`, status: 409, body: envelope('already open') },
       ...listRoutes(),
     ]);
-    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
+    renderWithClient(<CommitteePanel {...defaultProps({ launch: { status: 'DRAFT' } })} />);
     await waitFor(() => screen.getByRole('button', { name: /Open Application Window/ }));
 
     await act(async () => {
@@ -534,7 +534,7 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
 
   it('pre-fills the monitor RPC field from launch.monitor_rpc_url', async () => {
     mockFetch(listRoutes());
-    renderWithClient(<CoordinatorPanel {...defaultProps({ launch: { monitor_rpc_url: 'https://rpc.example.com' } })} />);
+    renderWithClient(<CommitteePanel {...defaultProps({ launch: { monitor_rpc_url: 'https://rpc.example.com' } })} />);
     await waitFor(() => {
       expect(screen.getByDisplayValue('https://rpc.example.com')).toBeInTheDocument();
     });
@@ -545,7 +545,7 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
       { method: 'PATCH', match: `/launch/${LAUNCH_ID}`, body: makeLaunch({ monitor_rpc_url: 'https://new-rpc.example.com' }) },
       ...listRoutes(),
     ]);
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
 
     await waitFor(() => screen.getByPlaceholderText(/https:\/\/rpc\.mychain/));
     fireEvent.change(screen.getByPlaceholderText(/https:\/\/rpc\.mychain/), {
@@ -573,10 +573,10 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
       { method: 'POST', match: `/launch/${LAUNCH_ID}/genesis`, body: { sha256: 'abc123' } },
       ...listRoutes(),
     ]);
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
-    await waitFor(() => screen.getByPlaceholderText(/files\.example\.com/));
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => screen.getByPlaceholderText(/genesis\.json/));
 
-    fireEvent.change(screen.getByPlaceholderText(/files\.example\.com/), {
+    fireEvent.change(screen.getByPlaceholderText(/genesis\.json/), {
       target: { value: 'https://files.example.com/genesis.json' },
     });
     fireEvent.change(screen.getByPlaceholderText(/64-character hex/), {
@@ -602,7 +602,7 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
 
   it('shows the genesis_time field only when final is selected', async () => {
     mockFetch(listRoutes());
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => screen.getByDisplayValue('initial'));
     expect(screen.queryByPlaceholderText(/2026-06-01T12/)).not.toBeInTheDocument();
 
@@ -612,7 +612,7 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
 
   it('requires the URL before submitting genesis', async () => {
     mockFetch(listRoutes());
-    renderWithClient(<CoordinatorPanel {...defaultProps()} />);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
     await waitFor(() => screen.getByRole('button', { name: /Submit Genesis Reference/ }));
 
     await act(async () => {
@@ -620,5 +620,150 @@ describe('CoordinatorPanel — CoordinatorActionsSection (H.10)', () => {
     });
 
     expect(screen.getByText('URL is required.')).toBeInTheDocument();
+  });
+});
+
+// ── Allocation files ──────────────────────────────────────────────────────────
+
+describe('CommitteePanel — AllocationFilesSection', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSignedResult();
+  });
+
+  const ALLOC = `/launch/${LAUNCH_ID}/allocations`;
+
+  it('lists registered allocation files with hash and status', async () => {
+    mockFetch([
+      {
+        method: 'GET',
+        match: ALLOC,
+        body: {
+          allocations: [
+            { type: 'accounts', sha256: 'deadbeefcafe', status: 'APPROVED', uploaded_at: '2026-05-01T00:00:00Z' },
+          ],
+        },
+      },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+
+    await waitFor(() => expect(screen.getByText('deadbeefcafe')).toBeInTheDocument());
+    expect(screen.getByText('APPROVED')).toBeInTheDocument();
+  });
+
+  it('shows the empty state when no allocation files exist', async () => {
+    mockFetch([{ method: 'GET', match: ALLOC, body: { allocations: [] } }, ...listRoutes()]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() =>
+      expect(screen.getByText(/No allocation files registered yet/)).toBeInTheDocument(),
+    );
+  });
+
+  it('registers an allocation file (attestor mode) with a JSON { url, sha256 } body', async () => {
+    mockFetch([
+      { method: 'POST', match: `${ALLOC}/accounts`, body: { sha256: 'abc' } },
+      { method: 'GET', match: ALLOC, body: { allocations: [] } },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+
+    await waitFor(() => screen.getByPlaceholderText('https://files.example.com/accounts.csv'));
+    fireEvent.change(screen.getByPlaceholderText('https://files.example.com/accounts.csv'), {
+      target: { value: 'https://files.example.com/a.csv' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('64-char hex SHA-256 digest'), {
+      target: { value: 'a'.repeat(64) },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Register allocation file' }));
+    });
+
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url, init]: [string, RequestInit]) => url === `${ALLOC}/accounts` && init?.method === 'POST',
+    );
+    expect(call).toBeDefined();
+    const init = call![1] as RequestInit;
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(init.body as string)).toEqual({
+      url: 'https://files.example.com/a.csv',
+      sha256: 'a'.repeat(64),
+    });
+    await waitFor(() =>
+      expect(screen.getByText('Allocation file registered.')).toBeInTheDocument(),
+    );
+  });
+
+  it('surfaces the error envelope when registration fails', async () => {
+    mockFetch([
+      { method: 'POST', match: `${ALLOC}/accounts`, status: 403, body: envelope('not a committee member') },
+      { method: 'GET', match: ALLOC, body: { allocations: [] } },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+
+    await waitFor(() => screen.getByPlaceholderText('https://files.example.com/accounts.csv'));
+    fireEvent.change(screen.getByPlaceholderText('https://files.example.com/accounts.csv'), {
+      target: { value: 'https://x/a.csv' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('64-char hex SHA-256 digest'), {
+      target: { value: 'a'.repeat(64) },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Register allocation file' }));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('not a committee member')).toBeInTheDocument(),
+    );
+  });
+
+  it('requires the URL before submitting', async () => {
+    mockFetch([{ method: 'GET', match: ALLOC, body: { allocations: [] } }, ...listRoutes()]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Register allocation file' }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Register allocation file' }));
+    });
+    expect(screen.getByText('URL is required.')).toBeInTheDocument();
+  });
+
+  it('downloads an allocation file via authedFetch (GET .../allocations/{type})', async () => {
+    mockFetch([
+      { method: 'GET', match: `${ALLOC}/accounts`, body: {} },
+      {
+        method: 'GET',
+        match: ALLOC,
+        body: {
+          allocations: [
+            { type: 'accounts', sha256: 'deadbeefcafe', status: 'APPROVED', uploaded_at: '2026-05-01T00:00:00Z' },
+          ],
+        },
+      },
+      ...listRoutes(),
+    ]);
+    const createObjectURL = jest.fn(() => 'blob:mock');
+    const revokeObjectURL = jest.fn();
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = createObjectURL;
+    (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = revokeObjectURL;
+    // Anchor.click() would make jsdom attempt a real navigation ("not implemented"); no-op it.
+    const clickSpy = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Download' }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Download' }));
+    });
+
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url]: [string]) => url === `${ALLOC}/accounts`,
+    );
+    expect(call).toBeDefined();
+    expect(createObjectURL).toHaveBeenCalled();
+    clickSpy.mockRestore();
   });
 });

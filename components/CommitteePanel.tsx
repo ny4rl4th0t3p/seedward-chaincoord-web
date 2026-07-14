@@ -21,6 +21,11 @@ import {
   usePostLaunchIdCancel,
 } from '@/api/generated/launches/launches';
 import { postLaunchIdGenesis } from '@/api/generated/genesis/genesis';
+import {
+  useGetLaunchIdAllocations,
+  postLaunchIdAllocationsType,
+} from '@/api/generated/allocations/allocations';
+import { authedFetch } from '@/api/authedFetch';
 import { usePostLaunchIdCommittee } from '@/api/generated/committee/committee';
 import type {
   ApiErrorEnvelope,
@@ -557,19 +562,19 @@ function ProposalListSection({
   );
 }
 
-// ── H.10 — Coordinator actions ────────────────────────────────────────────────
+// ── H.10 — Committee actions ────────────────────────────────────────────────
 
-interface CoordinatorActionsSectionProps {
+interface CommitteeActionsSectionProps {
   launchId: string;
   launch: ApiLaunchJSON;
   isLead: boolean;
 }
 
-function CoordinatorActionsSection({
+function CommitteeActionsSection({
   launchId,
   launch,
   isLead,
-}: CoordinatorActionsSectionProps) {
+}: CommitteeActionsSectionProps) {
   const queryClient = useQueryClient();
 
   // Open window
@@ -703,7 +708,7 @@ function CoordinatorActionsSection({
   const isDraft = launch.status === 'DRAFT';
 
   return (
-    <PanelCard title="Coordinator Actions">
+    <PanelCard title="Committee Actions">
       <Box display="flex" flexDirection="column" gap="16px">
 
         {/* Open application window */}
@@ -911,6 +916,206 @@ function GentxsSection({ launchId }: GentxsSectionProps) {
       <Button variant="primary" onClick={handleDownload} isLoading={isBusy} disabled={isBusy}>
         {isBusy ? 'Downloading…' : 'Download gentxs.json'}
       </Button>
+    </PanelCard>
+  );
+}
+
+// ── Allocation files ──────────────────────────────────────────────────────────
+//
+// GAP NOTE (UI ⇄ backend): coordd's POST /launch/{id}/allocations/{type} accepts TWO modes,
+// switched by Content-Type — attestor (application/json: external URL + SHA-256) and host
+// (application/octet-stream: raw file bytes, gated by COORD_GENESIS_HOST_MODE). This UI
+// deliberately surfaces ATTESTOR MODE ONLY, matching the genesis-upload UI, which is also
+// attestor-only. Host-mode raw uploads remain a backend/CLI capability with no web affordance.
+// See docs/decisions.md ("Allocation files: attestor-only upload") for the rationale + how to add host mode.
+
+const ALLOCATION_TYPES = ['accounts', 'claims', 'grants', 'authz', 'feegrant'] as const;
+type AllocationType = (typeof ALLOCATION_TYPES)[number];
+
+const SELECT_STYLE: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 12px',
+  borderRadius: '6px',
+  border: '1px solid var(--chakra-colors-divider, #e2e8f0)',
+  background: 'transparent',
+  color: 'inherit',
+  fontSize: '14px',
+  fontFamily: 'inherit',
+  boxSizing: 'border-box',
+};
+
+interface AllocationFilesSectionProps {
+  launchId: string;
+}
+
+function AllocationFilesSection({ launchId }: AllocationFilesSectionProps) {
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useGetLaunchIdAllocations(launchId);
+  const allocations = data?.allocations ?? [];
+
+  const [uploadType, setUploadType] = useState<AllocationType>('accounts');
+  const [url, setUrl] = useState('');
+  const [sha256, setSha256] = useState('');
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSaved, setUploadSaved] = useState(false);
+
+  const [downloadingType, setDownloadingType] = useState<AllocationType | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const handleUpload = async () => {
+    setUploadBusy(true);
+    setUploadError(null);
+    setUploadSaved(false);
+
+    if (!url.trim()) {
+      setUploadError('URL is required.');
+      setUploadBusy(false);
+      return;
+    }
+    if (!sha256.trim()) {
+      setUploadError('SHA-256 is required.');
+      setUploadBusy(false);
+      return;
+    }
+
+    try {
+      // Attestor mode (JSON { url, sha256 }) — the generated fetcher carries no typed body, so
+      // attach it via options, exactly like handleGenesisUpload. Host mode (raw bytes) is not
+      // surfaced here (see the GAP NOTE above).
+      await postLaunchIdAllocationsType(launchId, uploadType, {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url.trim(), sha256: sha256.trim() }),
+      });
+      queryClient.invalidateQueries();
+      setUploadSaved(true);
+      setUrl('');
+      setSha256('');
+    } catch (err) {
+      const env = err as ApiErrorEnvelope;
+      setUploadError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+
+  const handleDownload = async (type: AllocationType) => {
+    setDownloadingType(type);
+    setDownloadError(null);
+    try {
+      // Bytes/302 endpoint — the generated (JSON) client can't serve it (the shared mutator
+      // force-parses res.json()), so use authedFetch like the genesis download. Host-mode files
+      // stream raw bytes; attestor-mode files 302 to an external URL, where a cross-origin fetch
+      // is best-effort and may be blocked by the remote host's CORS policy.
+      const r = await authedFetch(`/launch/${launchId}/allocations/${type}`);
+      if (!r.ok) {
+        const body = (await r.json().catch(() => ({}))) as ApiErrorEnvelope;
+        setDownloadError(body.error?.message ?? `Server returned ${r.status}`);
+        return;
+      }
+      const arrayBuf = await r.arrayBuffer();
+      const blob = new Blob([arrayBuf], { type: 'application/octet-stream' });
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = `${type}-allocation`;
+      a.click();
+      URL.revokeObjectURL(objUrl);
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : 'Download failed');
+    } finally {
+      setDownloadingType(null);
+    }
+  };
+
+  return (
+    <PanelCard title="Allocation Files">
+      <Text fontSize="$xs" color="$textSecondary">
+        Register allocation files by type (attestor mode: a public URL + SHA-256). Each file lands
+        PENDING until approved via an APPROVE_ALLOCATION_FILE proposal.
+      </Text>
+
+      {isLoading ? (
+        <Text fontSize="$xs" color="$textSecondary">Loading…</Text>
+      ) : error ? (
+        <Text fontSize="$xs" color="$textDanger">
+          {error.error?.message ?? 'Failed to load allocation files'}
+        </Text>
+      ) : allocations.length === 0 ? (
+        <Text fontSize="$xs" color="$textSecondary">No allocation files registered yet.</Text>
+      ) : (
+        <Box display="flex" flexDirection="column" gap="8px">
+          {allocations.map((a) => (
+            <Box
+              key={a.type}
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+              gap="8px"
+            >
+              <Box display="flex" flexDirection="column">
+                <Text fontSize="$sm" fontWeight="$semibold">{a.type}</Text>
+                <Text fontSize="$xs" color="$textSecondary" fontFamily="monospace">
+                  {truncate(a.sha256 ?? '', 24)}
+                </Text>
+              </Box>
+              <Box display="flex" alignItems="center" gap="8px">
+                {a.status && <StatusBadge status={a.status} />}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownload(a.type as AllocationType)}
+                  isLoading={downloadingType === a.type}
+                  disabled={downloadingType !== null}
+                >
+                  Download
+                </Button>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      )}
+      {downloadError && <Text fontSize="$xs" color="$textDanger">{downloadError}</Text>}
+
+      <Box display="flex" flexDirection="column" gap="8px" attributes={{ mt: '8px' }}>
+        <Text fontSize="$sm" fontWeight="$semibold">Register Allocation File</Text>
+        <Box>
+          <FieldLabel>Type</FieldLabel>
+          <select
+            value={uploadType}
+            onChange={(e) => setUploadType(e.target.value as AllocationType)}
+            disabled={uploadBusy}
+            style={SELECT_STYLE}
+          >
+            {ALLOCATION_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </Box>
+        <Box>
+          <FieldLabel>Public URL *</FieldLabel>
+          <TextInput
+            value={url}
+            onChange={setUrl}
+            placeholder="https://files.example.com/accounts.csv"
+            disabled={uploadBusy}
+          />
+        </Box>
+        <Box>
+          <FieldLabel>SHA-256 *</FieldLabel>
+          <TextInput
+            value={sha256}
+            onChange={setSha256}
+            placeholder="64-char hex SHA-256 digest"
+            disabled={uploadBusy}
+          />
+        </Box>
+        {uploadError && <Text fontSize="$xs" color="$textDanger">{uploadError}</Text>}
+        {uploadSaved && <Text fontSize="$xs" color="$textSuccess">Allocation file registered.</Text>}
+        <Button variant="primary" onClick={handleUpload} isLoading={uploadBusy} disabled={uploadBusy}>
+          {uploadBusy ? 'Registering…' : 'Register allocation file'}
+        </Button>
+      </Box>
     </PanelCard>
   );
 }
@@ -1134,7 +1339,7 @@ function ReplaceCommitteeSection({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-interface CoordinatorPanelProps {
+interface CommitteePanelProps {
   launchId: string;
   hint: ChainHint;
   address: string;
@@ -1145,7 +1350,7 @@ interface CoordinatorPanelProps {
   isLead: boolean;
 }
 
-export function CoordinatorPanel({
+export function CommitteePanel({
   launchId,
   hint,
   address,
@@ -1154,15 +1359,16 @@ export function CoordinatorPanel({
   launch,
   committee,
   isLead,
-}: CoordinatorPanelProps) {
+}: CommitteePanelProps) {
   return (
     <Box display="flex" flexDirection="column" gap="16px">
-      <CoordinatorActionsSection
+      <CommitteeActionsSection
         launchId={launchId}
         launch={launch}
         isLead={isLead}
       />
       <GentxsSection launchId={launchId} />
+      <AllocationFilesSection launchId={launchId} />
       {isLead && launch.status === 'DRAFT' && (
         <ReplaceCommitteeSection
           launchId={launchId}
