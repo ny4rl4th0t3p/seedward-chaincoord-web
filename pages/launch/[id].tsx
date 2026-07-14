@@ -11,7 +11,7 @@ import { ChainHint } from '@/utils/chainSuggestion';
 import { useGetLaunchId } from '@/api/generated/launches/launches';
 import { useGetCommitteeLaunchId } from '@/api/generated/committee/committee';
 import { useGetLaunchIdDashboard } from '@/api/generated/readiness/readiness';
-import { useGetLaunchIdAudit } from '@/api/generated/audit/audit';
+import { useGetAuditPubkey, useGetLaunchIdAudit } from '@/api/generated/audit/audit';
 import { useGetLaunchIdRehearsal } from '@/api/generated/rehearsal/rehearsal';
 
 // ── Top-level page ─────────────────────────────────────────────────────────────
@@ -416,9 +416,7 @@ function InfoRow({
 // ── Audit log section ─────────────────────────────────────────────────────────
 
 function AuditLogSection({ launchId }: { launchId: string }) {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
   const [loadRequested, setLoadRequested] = useState(false);
-  const [pubkey, setPubkey] = useState<string | null>(null);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   const { data, isLoading, error } = useGetLaunchIdAudit(launchId, {
@@ -426,15 +424,15 @@ function AuditLogSection({ launchId }: { launchId: string }) {
   });
   const entries = data?.entries ?? null;
 
+  // Best-effort: a failure here just hides the pubkey row and never blocks the audit entries
+  // above (separate query, error ignored). Auth is carried by the shared mutator.
+  const { data: pubkeyData } = useGetAuditPubkey({
+    query: { enabled: loadRequested },
+  });
+  const pubkey = pubkeyData?.public_key ?? null;
+
   const handleLoad = () => {
     setLoadRequested(true);
-    // The audit pubkey endpoint is public (no auth) — best-effort raw fetch.
-    fetch(`${API_BASE}/audit/pubkey`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d?.public_key) setPubkey(d.public_key);
-      })
-      .catch(() => {});
   };
 
   return (

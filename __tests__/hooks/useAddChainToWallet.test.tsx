@@ -45,8 +45,10 @@ describe('useAddChainToWallet', () => {
       await result.current.addChain();
     });
 
+    // Routed through the generated client's shared mutator, so fetch gets (url, {method, headers}).
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/launch/launch-abc/chain-hint'),
+      expect.objectContaining({ method: 'GET' }),
     );
   });
 
@@ -79,10 +81,12 @@ describe('useAddChainToWallet', () => {
   });
 
   it('sets error and keeps isRegistered=false on fetch failure', async () => {
+    // coordd returns its nested error envelope on non-2xx; the shared mutator throws it and
+    // the hook surfaces `.error.message`.
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
       status: 404,
-      json: async () => ({}),
+      json: async () => ({ error: { code: 'not_found', message: 'launch not found' } }),
     } as Response);
     const { result } = renderHook(() => useAddChainToWallet('launch-bad'));
 
@@ -93,7 +97,7 @@ describe('useAddChainToWallet', () => {
     expect(result.current.isRegistered).toBe(false);
     expect(result.current.hint).toBeNull();
     expect(result.current.error).toBeInstanceOf(Error);
-    expect(result.current.error?.message).toContain('404');
+    expect(result.current.error?.message).toContain('launch not found');
   });
 
   it('sets error and keeps isRegistered=false when addChains throws', async () => {

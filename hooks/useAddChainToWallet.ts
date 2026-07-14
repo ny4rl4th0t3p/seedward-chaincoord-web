@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useWalletManager } from '@interchain-kit/react';
+import { getLaunchIdChainHint } from '@/api/generated/launches/launches';
 import { buildChainSuggestion, ChainHint } from '@/utils/chainSuggestion';
 
 export interface UseAddChainToWalletResult {
@@ -11,11 +12,10 @@ export interface UseAddChainToWalletResult {
   error: Error | null;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-
 /**
- * Fetches the chain-hint for a launch (unauthenticated) and registers the chain
- * with the WalletManager + all connected wallet extensions via experimentalSuggestChain.
+ * Fetches the chain-hint for a launch (authenticated — via the shared API client, so the
+ * Bearer token is attached and a 401 triggers logout) and registers the chain with the
+ * WalletManager + all connected wallet extensions via experimentalSuggestChain.
  *
  * `isRegistered` becomes true once addChains() completes (chain is known to interchain-kit).
  * Any useChain(chainName) call must be gated on isRegistered to avoid ChainNameNotExist errors.
@@ -32,11 +32,19 @@ export function useAddChainToWallet(launchId: string): UseAddChainToWalletResult
     setIsPending(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/launch/${launchId}/chain-hint`);
-      if (!res.ok) {
-        throw new Error(`chain-hint fetch failed: ${res.status}`);
+      const raw = await getLaunchIdChainHint(launchId);
+      // The generated model types every field optional; coordd always returns them for a valid
+      // hint, so narrow explicitly and fail loudly if any is missing rather than build a
+      // half-undefined suggestion.
+      if (!raw.chain_id || !raw.chain_name || !raw.bech32_prefix || !raw.denom) {
+        throw new Error('chain-hint response missing required fields');
       }
-      const fetchedHint: ChainHint = await res.json();
+      const fetchedHint: ChainHint = {
+        chain_id: raw.chain_id,
+        chain_name: raw.chain_name,
+        bech32_prefix: raw.bech32_prefix,
+        denom: raw.denom,
+      };
       const { chain, assetList } = buildChainSuggestion(fetchedHint);
 
       // Register chain in interchain-kit's internal store.
@@ -53,7 +61,13 @@ export function useAddChainToWallet(launchId: string): UseAddChainToWalletResult
       setHint(fetchedHint);
       setIsRegistered(true);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      // getLaunchIdChainHint throws coordd's error envelope ({ error: { message } }) — a plain
+      // object, not an Error — on non-2xx; surface its message, else fall back for real Errors.
+      const message =
+        err instanceof Error
+          ? err.message
+          : ((err as { error?: { message?: string } })?.error?.message ?? String(err));
+      setError(new Error(message));
     } finally {
       setIsPending(false);
     }

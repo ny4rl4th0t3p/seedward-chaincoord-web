@@ -3,6 +3,16 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 const SESSION_KEYS = ['coord_auth_token', 'coord_auth_address', 'coord_auth_chain'] as const;
 
 /**
+ * RULE — orval by default: consume every JSON endpoint through the generated client
+ * (`api/generated/**` — a `useX()` hook for render-time reads, or the bare `getX()`/`postX()`
+ * fetcher for imperative/event-driven calls). Those route through the shared `authFetchMutator`,
+ * so you inherit Bearer-token auth, 401→logout, and the `{error:{...}}` envelope for free.
+ * Reach for a bespoke fetch ONLY when the generated client genuinely can't serve the call:
+ *   - non-JSON bytes (this file — see below);
+ *   - the pre-JWT auth handshake, which runs before a token exists (`contexts/auth.tsx`);
+ *   - server-sent events, which react-query can't stream (`EventSource`).
+ * A hand-rolled `fetch` to a JSON endpoint is a bug: it silently skips auth + the error envelope.
+ *
  * Raw authenticated fetch for the handful of endpoints that are NOT JSON, so the generated (JSON)
  * client can't serve them:
  *   - genesis file download — the exact bytes are needed to verify SHA-256 against the published hash
