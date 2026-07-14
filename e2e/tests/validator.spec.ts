@@ -53,6 +53,34 @@ test('K.4.1val submit join request shows pending status', async ({ browser }) =>
   await valCtx.close();
 });
 
+// ── K.4.2 Advisory (client-side WASM) gentx validation ────────────────────────
+
+test('K.4.2val advisory WASM validation flags a bad gentx before submit', async ({ browser }) => {
+  // Coordinator creates a launch with the validator as a member so it can read the launch + see the form.
+  const coordCtx = await browser.newContext();
+  const coordPage = await coordCtx.newPage();
+  const launchId = await createLaunch(coordPage, {
+    chainName: 'k4adv', chainId: 'k4adv-1', bech32Prefix: 'k4a',
+    members: [validator().address('k4a')],
+  });
+
+  const valCtx = await browser.newContext();
+  const valPage = await valCtx.newPage();
+  await installValidatorWalletStub(valPage, validator(), 'k4a');
+  await loginAs(valPage, validator(), { bech32Prefix: 'k4a', navigateTo: `/launch/${launchId}` });
+
+  // Paste a structurally-broken gentx. The advisory check is purely client-side (no submit), so the
+  // box only appears if the whole WASM path ran: fetch /wasm/gentxvalidate.wasm.gz → gunzip →
+  // instantiate → RunLight → render. This is the real proof the vendored blob loads in a browser.
+  await valPage.getByPlaceholder(/MsgCreateValidator/).fill('{"body":{}}');
+
+  // ~2 MB fetch + decompress + instantiate, plus the 400 ms debounce — allow generous time.
+  await expect(valPage.getByText(/advisory gentx checks/i)).toBeVisible({ timeout: 20_000 });
+
+  await coordCtx.close();
+  await valCtx.close();
+});
+
 // ── K.5 Full coordinator + validator flow (multi-actor) ────────────────────────
 
 test('K.5 full launch flow: create → open → join → approve', async ({ browser }) => {

@@ -12,6 +12,8 @@
     "playwright": "playwright test",
     "playwright:install": "playwright install chromium",
     "sync:spec": "cp ${COORDD_SPEC:-../seedward-chaincoord/docs/mkdocs/api/swagger.yaml} openapi/swagger.yaml",
+    "sync:wasm": "bash scripts/sync-wasm.sh",
+    "check:wasm-version": "bash scripts/check-wasm-version.sh",
     "gen:api": "swagger2openapi openapi/swagger.yaml -o openapi/openapi.json --patch && orval --config orval.config.ts",
     "starship": "starship --config starship/configs/config.yaml"
   },

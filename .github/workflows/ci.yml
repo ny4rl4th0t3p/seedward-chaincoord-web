@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   check:
-    name: typecheck · lint · test · spec-drift
+    name: typecheck · lint · test · spec-drift · wasm-pin
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,3 +45,8 @@ jobs:
             git --no-pager diff --stat -- api/generated
             exit 1
           fi
+
+      # The vendored gentxvalidate WASM pin must match the seedward-libs version coordd's LATEST RELEASE
+      # depends on — else the advisory client runs a different validator than the authoritative server.
+      - name: WASM validator pin matches coordd's latest release
+        run: yarn check:wasm-version
