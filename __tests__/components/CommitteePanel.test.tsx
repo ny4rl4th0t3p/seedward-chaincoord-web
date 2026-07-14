@@ -22,6 +22,12 @@ jest.mock('@interchain-ui/react', () => ({
   Text: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
 }));
 
+// ProposalListSection renders a next/link permalink; mock it to avoid a router-context dependency.
+jest.mock('next/link', () => ({
+  __esModule: true,
+  default: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+}));
+
 jest.mock('@/components', () => ({
   Button: ({
     children,
@@ -882,5 +888,64 @@ describe('CommitteePanel — MembersSection', () => {
       ([url, init]: [string, RequestInit]) => url === `${MEMBERS}/${MEMBER}` && init?.method === 'DELETE',
     );
     expect(call).toBeDefined();
+  });
+});
+
+// ── Join queue: grouped-by-submitter view ──────────────────────────────────────
+
+describe('CommitteePanel — JoinQueueSection grouped view', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSignedResult();
+  });
+
+  it('toggles to a grouped-by-submitter view (label, count, self-delegation)', async () => {
+    mockFetch([
+      {
+        method: 'GET',
+        match: '/join/grouped',
+        body: [
+          {
+            submitter_address: 'cosmos1submitteraaaaaaaaaaaaaaaaaaaaaaaaaa',
+            label: 'Acme Group',
+            request_count: 2,
+            total_self_delegation: '1000000',
+            requests: [
+              { id: 'jr1', operator_address: 'cosmos1valaaaa', status: 'PENDING' },
+              { id: 'jr2', operator_address: 'cosmos1valbbbb', status: 'APPROVED' },
+            ],
+          },
+        ],
+      },
+      ...listRoutes({ joinItems: [makeJoinRequest()] }),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+
+    await waitFor(() => screen.getByRole('button', { name: 'Group by submitter' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Group by submitter' }));
+    });
+
+    await waitFor(() => expect(screen.getByText('Acme Group')).toBeInTheDocument());
+    expect(screen.getByText(/self-delegation/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Flat list' })).toBeInTheDocument();
+  });
+
+  it('shows the grouped empty state and does not fetch grouped until toggled', async () => {
+    const fetchMock = mockFetch([
+      { method: 'GET', match: '/join/grouped', body: [] },
+      ...listRoutes({ joinItems: [makeJoinRequest()] }),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Group by submitter' }));
+
+    // Grouped endpoint must not be hit while the flat view is showing.
+    expect(fetchMock.mock.calls.some(([url]: [string, RequestInit?]) => url.includes('/join/grouped'))).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Group by submitter' }));
+    });
+    await waitFor(() => expect(screen.getByText(/No join requests yet/)).toBeInTheDocument());
+    expect(fetchMock.mock.calls.some(([url]: [string, RequestInit?]) => url.includes('/join/grouped'))).toBe(true);
   });
 });

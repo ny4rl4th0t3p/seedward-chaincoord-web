@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Link from 'next/link';
 import { Box, Text } from '@interchain-ui/react';
 import { CosmosWallet } from '@interchain-kit/core';
 import type { StatefulWallet } from '@interchain-kit/react/store/stateful-wallet';
@@ -13,6 +14,7 @@ import {
 } from '@/api/generated/proposals/proposals';
 import {
   useGetLaunchIdJoin,
+  useGetLaunchIdJoinGrouped,
   getLaunchIdGentxs,
 } from '@/api/generated/join-requests/join-requests';
 import {
@@ -269,6 +271,13 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId }: J
   );
   const requests = data?.items ?? [];
 
+  // Grouped-by-submitter review view (roles.md: the committee reviews applications grouped by
+  // submitter, matching each operator + self-delegation against the label's off-band expectation).
+  // Read-only aid — approve/reject stay in the flat list. Fetched only while the view is on.
+  const [grouped, setGrouped] = useState(false);
+  const groupedQuery = useGetLaunchIdJoinGrouped(launchId, { query: { enabled: grouped } });
+  const groups = groupedQuery.data ?? [];
+
   // active proposal form state: which (join request, action) is being raised
   const [activeForm, setActiveForm] = useState<{ jr: ApiJoinRequestJSON; action: ActionKind } | null>(null);
   // proposals raised this session, keyed by join request id
@@ -279,9 +288,75 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId }: J
     setActiveForm(null);
   };
 
+  const toggle = (
+    <Box>
+      <Button variant="outline" size="sm" onClick={() => setGrouped((g) => !g)}>
+        {grouped ? 'Flat list' : 'Group by submitter'}
+      </Button>
+    </Box>
+  );
+
+  if (grouped) {
+    return (
+      <PanelCard title="Applications by submitter">
+        {toggle}
+        {groupedQuery.isLoading ? (
+          <Text fontSize="$sm" color="$textSecondary">Loading…</Text>
+        ) : groupedQuery.error ? (
+          <Text fontSize="$sm" color="$textDanger">
+            {groupedQuery.error.error?.message ?? 'Network error'}
+          </Text>
+        ) : groups.length === 0 ? (
+          <Text fontSize="$sm" color="$textSecondary">No join requests yet.</Text>
+        ) : (
+          <Box display="flex" flexDirection="column" gap="12px">
+            {groups.map((g) => (
+              <Box
+                key={g.submitter_address}
+                borderRadius="6px"
+                border="1px solid"
+                borderColor="$divider"
+                p="12px"
+                display="flex"
+                flexDirection="column"
+                gap="8px"
+              >
+                <Box display="flex" flexDirection="column" gap="2px">
+                  <Text fontSize="$xs" fontFamily="monospace">
+                    {truncate(g.submitter_address ?? '', 32)}
+                  </Text>
+                  {g.label && <Text fontSize="$xs" color="$textSecondary">{g.label}</Text>}
+                  <Text fontSize="$xs" color="$textSecondary">
+                    {g.request_count ?? g.requests?.length ?? 0} request(s) · self-delegation{' '}
+                    {g.total_self_delegation ?? '0'}
+                  </Text>
+                </Box>
+                {(g.requests ?? []).map((jr) => (
+                  <Box
+                    key={jr.id}
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    gap="8px"
+                  >
+                    <Text fontSize="$xs" fontFamily="monospace">
+                      {truncate(jr.operator_address ?? '', 32)}
+                    </Text>
+                    <StatusBadge status={jr.status ?? ''} />
+                  </Box>
+                ))}
+              </Box>
+            ))}
+          </Box>
+        )}
+      </PanelCard>
+    );
+  }
+
   if (isLoading) {
     return (
       <PanelCard title="Join Request Queue">
+        {toggle}
         <Text fontSize="$sm" color="$textSecondary">Loading…</Text>
       </PanelCard>
     );
@@ -290,6 +365,7 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId }: J
   if (error) {
     return (
       <PanelCard title="Join Request Queue">
+        {toggle}
         <Text fontSize="$sm" color="$textDanger">{error.error?.message ?? 'Network error'}</Text>
       </PanelCard>
     );
@@ -298,6 +374,7 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId }: J
   if (requests.length === 0) {
     return (
       <PanelCard title="Join Request Queue">
+        {toggle}
         <Text fontSize="$sm" color="$textSecondary">No join requests yet.</Text>
       </PanelCard>
     );
@@ -305,6 +382,7 @@ function JoinQueueSection({ launchId, hint, address, wallet, signingChainId }: J
 
   return (
     <PanelCard title={`Join Request Queue (${requests.length})`}>
+      {toggle}
       <Box display="flex" flexDirection="column" gap="12px">
         {requests.map((jr) => {
           const jrId = jr.id ?? '';
@@ -515,6 +593,13 @@ function ProposalListSection({
                   )}
                 </Box>
                 <StatusBadge status={p.status ?? ''} />
+              </Box>
+
+              {/* Deep link to the standalone proposal detail page */}
+              <Box>
+                <Link href={`/launch/${launchId}/proposal/${pid}`}>
+                  <Text fontSize="$xs" color="$textSecondary">Permalink ↗</Text>
+                </Link>
               </Box>
 
               {/* Signatures */}
