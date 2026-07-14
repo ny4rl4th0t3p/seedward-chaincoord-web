@@ -5,6 +5,7 @@ import { useChain } from '@interchain-kit/react';
 import { Button } from '@/components';
 import { ValidatorPanel } from '@/components/ValidatorPanel';
 import { CommitteePanel } from '@/components/CommitteePanel';
+import { RehearsalResetButton } from '@/components/RehearsalResetButton';
 import { useAddChainToWallet } from '@/hooks';
 import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
@@ -507,7 +508,7 @@ function rehearsalOutcomeColor(outcome?: string): string {
 }
 
 function RehearsalStatusCard({ launchId }: { launchId: string }) {
-  const { data, isLoading, error } = useGetLaunchIdRehearsal(launchId, {
+  const { data, isLoading, error, refetch } = useGetLaunchIdRehearsal(launchId, {
     query: { retry: false },
   });
   const latest = data?.[0];
@@ -540,6 +541,13 @@ function RehearsalStatusCard({ launchId }: { launchId: string }) {
             <Text fontSize="$xs" color="$textDanger">
               The approved set changed since this rehearsal — re-run before finalizing genesis.
             </Text>
+          )}
+          {latest.attempt_id && (
+            <RehearsalResetButton
+              launchId={launchId}
+              attemptId={latest.attempt_id}
+              onDone={refetch}
+            />
           )}
         </>
       )}
