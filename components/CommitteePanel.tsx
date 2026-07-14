@@ -25,6 +25,11 @@ import {
   useGetLaunchIdAllocations,
   postLaunchIdAllocationsType,
 } from '@/api/generated/allocations/allocations';
+import {
+  useGetLaunchIdMembers,
+  usePostLaunchIdMembers,
+  useDeleteLaunchIdMembersAddress,
+} from '@/api/generated/members/members';
 import { authedFetch } from '@/api/authedFetch';
 import { usePostLaunchIdCommittee } from '@/api/generated/committee/committee';
 import type {
@@ -1337,6 +1342,169 @@ function ReplaceCommitteeSection({
   );
 }
 
+// ── Members allowlist ─────────────────────────────────────────────────────────
+//
+// Private-always visibility: the members allowlist controls who can *see* the launch and
+// submit join requests. Committee members add each validator's HOT address (with a label
+// pointing to off-band verification) and can remove entries. Clean JSON CRUD → orval hooks.
+
+interface MembersSectionProps {
+  launchId: string;
+}
+
+function MembersSection({ launchId }: MembersSectionProps) {
+  const { data, isLoading, error, refetch } = useGetLaunchIdMembers(launchId);
+  // The endpoint returns a bare array; guard against a non-array body (defensive).
+  const members = Array.isArray(data) ? data : [];
+
+  const addMember = usePostLaunchIdMembers();
+  const removeMember = useDeleteLaunchIdMembersAddress();
+
+  const [newAddress, setNewAddress] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmingAddr, setConfirmingAddr] = useState<string | null>(null);
+  const [removingAddr, setRemovingAddr] = useState<string | null>(null);
+
+  const handleAdd = async () => {
+    const address = newAddress.trim();
+    if (!address) {
+      setAddError('Address is required.');
+      return;
+    }
+    setAddError(null);
+    try {
+      await addMember.mutateAsync({
+        id: launchId,
+        data: { address, label: newLabel.trim() || undefined },
+      });
+      setNewAddress('');
+      setNewLabel('');
+      refetch();
+    } catch (err) {
+      const env = err as ApiErrorEnvelope;
+      setAddError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
+    }
+  };
+
+  const handleRemove = async (address: string) => {
+    setRemovingAddr(address);
+    setActionError(null);
+    try {
+      await removeMember.mutateAsync({ id: launchId, address });
+    } catch (err) {
+      // A 404 (already gone) is benign — fall through to refetch. Anything else surfaces.
+      const env = err as ApiErrorEnvelope & { status?: number };
+      if (env.status !== 404) {
+        setActionError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
+        setRemovingAddr(null);
+        setConfirmingAddr(null);
+        return;
+      }
+    }
+    refetch();
+    setRemovingAddr(null);
+    setConfirmingAddr(null);
+  };
+
+  return (
+    <PanelCard title="Members Allowlist">
+      <Text fontSize="$xs" color="$textSecondary">
+        Controls who can see this private launch and submit join requests. Add each validator&apos;s
+        hot address with a label pointing to off-band verification of who that operator is.
+      </Text>
+
+      <Box display="flex" flexDirection="column" gap="8px">
+        <Box>
+          <FieldLabel>Address *</FieldLabel>
+          <TextInput
+            value={newAddress}
+            onChange={setNewAddress}
+            placeholder="cosmos1… hot address"
+            disabled={addMember.isLoading}
+          />
+        </Box>
+        <Box>
+          <FieldLabel>Label</FieldLabel>
+          <TextInput
+            value={newLabel}
+            onChange={setNewLabel}
+            placeholder="e.g. Acme Validators (optional)"
+            disabled={addMember.isLoading}
+          />
+        </Box>
+        {addError && <Text fontSize="$xs" color="$textDanger">{addError}</Text>}
+        <Button variant="primary" onClick={handleAdd} isLoading={addMember.isLoading} disabled={addMember.isLoading}>
+          {addMember.isLoading ? 'Adding…' : 'Add member'}
+        </Button>
+      </Box>
+
+      {actionError && <Text fontSize="$xs" color="$textDanger">{actionError}</Text>}
+
+      {isLoading ? (
+        <Text fontSize="$xs" color="$textSecondary">Loading…</Text>
+      ) : error ? (
+        <Text fontSize="$xs" color="$textDanger">
+          {error.error?.message ?? 'Failed to load members'}
+        </Text>
+      ) : members.length === 0 ? (
+        <Text fontSize="$xs" color="$textSecondary">No members on the allowlist yet.</Text>
+      ) : (
+        <Box display="flex" flexDirection="column" gap="8px">
+          {members.map((m) => (
+            <Box
+              key={m.address}
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+              gap="8px"
+            >
+              <Box display="flex" flexDirection="column">
+                <Text fontSize="$sm" fontWeight="$semibold" fontFamily="monospace">
+                  {truncate(m.address ?? '', 24)}
+                </Text>
+                {m.label && <Text fontSize="$xs" color="$textSecondary">{m.label}</Text>}
+              </Box>
+              {confirmingAddr === m.address ? (
+                <Box display="flex" gap="8px" alignItems="center">
+                  <Text fontSize="$xs" color="$textDanger">Remove?</Text>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleRemove(m.address ?? '')}
+                    isLoading={removingAddr === m.address}
+                    disabled={removingAddr !== null}
+                  >
+                    Confirm
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirmingAddr(null)}
+                    disabled={removingAddr !== null}
+                  >
+                    Keep
+                  </Button>
+                </Box>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmingAddr(m.address ?? null)}
+                  disabled={removingAddr !== null}
+                >
+                  Remove
+                </Button>
+              )}
+            </Box>
+          ))}
+        </Box>
+      )}
+    </PanelCard>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 interface CommitteePanelProps {
@@ -1369,6 +1537,7 @@ export function CommitteePanel({
       />
       <GentxsSection launchId={launchId} />
       <AllocationFilesSection launchId={launchId} />
+      <MembersSection launchId={launchId} />
       {isLead && launch.status === 'DRAFT' && (
         <ReplaceCommitteeSection
           launchId={launchId}

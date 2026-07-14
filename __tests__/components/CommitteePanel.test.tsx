@@ -767,3 +767,120 @@ describe('CommitteePanel — AllocationFilesSection', () => {
     clickSpy.mockRestore();
   });
 });
+
+// ── Members allowlist ─────────────────────────────────────────────────────────
+
+describe('CommitteePanel — MembersSection', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSignedResult();
+  });
+
+  const MEMBERS = `/launch/${LAUNCH_ID}/members`;
+  const MEMBER = 'cosmos1memberaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+  it('lists members with their label', async () => {
+    mockFetch([
+      {
+        method: 'GET',
+        match: MEMBERS,
+        body: [{ address: MEMBER, label: 'Acme Validators', added_by: ADDRESS, added_at: '2026-05-01T00:00:00Z' }],
+      },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => expect(screen.getByText('Acme Validators')).toBeInTheDocument());
+  });
+
+  it('shows the empty state when no members exist', async () => {
+    mockFetch([{ method: 'GET', match: MEMBERS, body: [] }, ...listRoutes()]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() =>
+      expect(screen.getByText(/No members on the allowlist yet/)).toBeInTheDocument(),
+    );
+  });
+
+  it('adds a member with a JSON { address, label } body', async () => {
+    mockFetch([
+      { method: 'POST', match: MEMBERS, body: {} },
+      { method: 'GET', match: MEMBERS, body: [] },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => screen.getByPlaceholderText('cosmos1… hot address'));
+
+    fireEvent.change(screen.getByPlaceholderText('cosmos1… hot address'), { target: { value: MEMBER } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Acme Validators (optional)'), {
+      target: { value: 'Acme' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    });
+
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url, init]: [string, RequestInit]) => url === MEMBERS && init?.method === 'POST',
+    );
+    expect(call).toBeDefined();
+    expect(JSON.parse(call![1].body as string)).toEqual({ address: MEMBER, label: 'Acme' });
+  });
+
+  it('surfaces the error envelope when adding a member fails', async () => {
+    mockFetch([
+      { method: 'POST', match: MEMBERS, status: 409, body: envelope('already a member') },
+      { method: 'GET', match: MEMBERS, body: [] },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => screen.getByPlaceholderText('cosmos1… hot address'));
+    fireEvent.change(screen.getByPlaceholderText('cosmos1… hot address'), { target: { value: MEMBER } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    });
+    await waitFor(() => expect(screen.getByText('already a member')).toBeInTheDocument());
+  });
+
+  it('requires an address before adding', async () => {
+    mockFetch([{ method: 'GET', match: MEMBERS, body: [] }, ...listRoutes()]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Add member' }));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    });
+    expect(screen.getByText('Address is required.')).toBeInTheDocument();
+  });
+
+  it('removes a member only after a confirm step (DELETE .../members/{address})', async () => {
+    mockFetch([
+      { method: 'DELETE', match: `${MEMBERS}/`, body: {} },
+      {
+        method: 'GET',
+        match: MEMBERS,
+        body: [{ address: MEMBER, label: 'Acme', added_by: ADDRESS, added_at: '2026-05-01T00:00:00Z' }],
+      },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps()} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Remove' }));
+
+    // First click only asks for confirmation — no DELETE yet.
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(screen.getByText('Remove?')).toBeInTheDocument();
+    expect(
+      (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+        ([, init]: [string, RequestInit]) => init?.method === 'DELETE',
+      ),
+    ).toBeUndefined();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    });
+
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url, init]: [string, RequestInit]) => url === `${MEMBERS}/${MEMBER}` && init?.method === 'DELETE',
+    );
+    expect(call).toBeDefined();
+  });
+});
