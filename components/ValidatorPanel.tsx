@@ -14,6 +14,7 @@ import {
   useGetLaunchIdPeers,
 } from '@/api/generated/readiness/readiness';
 import { authedFetch } from '@/api/authedFetch';
+import { sameAccount } from '@/utils/address';
 import type {
   ServicesSubmitInput,
   ServicesConfirmInput,
@@ -710,7 +711,7 @@ export function ValidatorPanel({
   launch,
   dashboard,
 }: ValidatorPanelProps) {
-  const myReadiness = dashboard?.validators?.find((v) => v.operator_address === address);
+  const myReadiness = dashboard?.validators?.find((v) => sameAccount(v.operator_address, address));
   const isApproved = !!myReadiness;
   const isReady = myReadiness?.is_ready ?? false;
   // Stable identity so the advisory-validation effect doesn't re-run every render.

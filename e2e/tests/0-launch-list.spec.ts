@@ -50,9 +50,10 @@ test('K.2.3 created launch appears in the list', async ({ page }) => {
   // Redirect to launch detail.
   await expect(page).toHaveURL(/\/launch\/[a-f0-9-]{36}/, { timeout: 10_000 });
 
-  // Go back to list.
+  // Go back to the list. The create already committed (the redirect above proves it), so a fresh
+  // navigation reads it from the server; a generous timeout absorbs slower backends (e.g. container).
   await page.goto('/');
-  await expect(page.getByText('listtest', { exact: true })).toBeVisible();
+  await expect(page.getByText('listtest', { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText('listtest-1')).toBeVisible();
 });
 

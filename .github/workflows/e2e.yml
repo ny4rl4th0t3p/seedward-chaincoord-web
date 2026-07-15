@@ -18,19 +18,21 @@ jobs:
       # The web app (this repo) at the workspace root.
       - uses: actions/checkout@v4
 
-      # coordd lives in the sibling (public) repo; the e2e globalSetup runs its binary. Check it out + build.
-      - uses: actions/checkout@v4
-        with:
-          repository: ny4rl4th0t3p/seedward-chaincoord
-          path: seedward-chaincoord
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: seedward-chaincoord/go.mod
-
-      - name: Build coordd
-        working-directory: seedward-chaincoord
-        run: make build-server   # → bin/coordd (pure-Go sqlite, no CGO)
+      # Run against the PUBLISHED coordd release — the exact binary users run, and the version the
+      # vendored OpenAPI spec + WASM pin match — rather than a source build of coordd's main. More
+      # reproducible + faster (no Go toolchain / compile). Bump COORDD_VERSION when the web targets
+      # a newer coordd release.
+      - name: Download coordd release binary
+        env:
+          COORDD_VERSION: v1.0.0-rc1
+        run: |
+          asset="seedward-chaincoord_${COORDD_VERSION#v}_linux_amd64.tar.gz"
+          url="https://github.com/ny4rl4th0t3p/seedward-chaincoord/releases/download/${COORDD_VERSION}/${asset}"
+          echo "Downloading ${url}"
+          curl -fsSL -o coordd.tar.gz "${url}"
+          mkdir -p coordd-bin && tar xzf coordd.tar.gz -C coordd-bin
+          chmod +x coordd-bin/coordd
+          echo "COORDD_BIN=$(pwd)/coordd-bin/coordd" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -49,9 +51,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Playwright
-        env:
-          # Absolute path to the coordd binary the globalSetup spawns (overrides the sibling default).
-          COORDD_BIN: ${{ github.workspace }}/seedward-chaincoord/bin/coordd
+        # COORDD_BIN is exported into $GITHUB_ENV by the download step above.
         run: yarn playwright
 
       - name: Upload Playwright artifacts

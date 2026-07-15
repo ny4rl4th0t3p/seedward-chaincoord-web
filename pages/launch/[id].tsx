@@ -10,6 +10,7 @@ import { AuditLogSection } from '@/components/AuditLogSection';
 import { useAddChainToWallet } from '@/hooks';
 import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
+import { sameAccount } from '@/utils/address';
 import { useGetLaunchId } from '@/api/generated/launches/launches';
 import { useGetCommitteeLaunchId } from '@/api/generated/committee/committee';
 import { useGetLaunchIdDashboard } from '@/api/generated/readiness/readiness';
@@ -91,7 +92,14 @@ function UnauthenticatedLanding({ launchId }: { launchId: string }) {
         <StepCard
           title="Add chain to wallet"
           description="Before you can authenticate, this chain must be registered in your wallet extension."
-          error={error?.message}
+          // Any failure here is a private-launch visibility gate (a 404 for non-members, identical
+          // whether or not the launch exists). Show a uniform, non-leaking prompt — never the raw
+          // "not found" message, which would imply the launch exists.
+          error={
+            error
+              ? 'Sign in to continue. Launches are private — visible only to their committee and allowlisted members.'
+              : undefined
+          }
         >
           <Button variant="primary" onClick={addChain} isLoading={isPending} disabled={isPending}>
             {isPending ? 'Adding…' : 'Add Chain to Wallet'}
@@ -216,8 +224,9 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
   // ── Derived ─────────────────────────────────────────────────────────────────
 
   const address = operatorAddress!;
-  const isCommitteeMember = (committee?.members ?? []).some((m) => m.address === address);
-  const isLead = committee?.lead_address === address;
+  // HRP-independent: auth address may be `cosmos1…` while the committee renders in the launch prefix.
+  const isCommitteeMember = (committee?.members ?? []).some((m) => sameAccount(m.address, address));
+  const isLead = sameAccount(committee?.lead_address, address);
 
   // Build hint from the fetched launch record (same shape, avoids a second fetch)
   const hint: ChainHint | null = launch?.record

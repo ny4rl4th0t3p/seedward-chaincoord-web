@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Box, Text } from '@interchain-ui/react';
-import { CosmosWallet } from '@interchain-kit/core';
 import type { StatefulWallet } from '@interchain-kit/react/store/stateful-wallet';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components';
-import { buildSignedAction, buildCanonicalActionPayload } from '@/utils/signedAction';
+import { buildSignedAction } from '@/utils/signedAction';
 import type { ChainHint } from '@/utils/chainSuggestion';
+import { sameAccount } from '@/utils/address';
 import {
   usePostLaunchIdProposal,
   usePostLaunchIdProposalPropIdSign,
@@ -559,7 +559,7 @@ function ProposalListSection({
         {pendingFirst.map((p) => {
           const pid = p.id ?? '';
           const signatures = p.signatures ?? [];
-          const myDecision = signatures.find((s) => s.coordinator_address === address);
+          const myDecision = signatures.find((s) => sameAccount(s.coordinator_address, address));
           const isPending = p.status === 'PENDING_SIGNATURES';
           const canAct = isPending && !myDecision;
           const state = signingState[pid];
@@ -1272,40 +1272,20 @@ function ReplaceCommitteeSection({
     if (m < 1 || m > n) { setError(`threshold_m must be between 1 and ${n}`); return; }
     if (members.length !== n) { setError(`member count (${members.length}) must equal total_n (${n})`); return; }
 
+    // Committee member addresses must be present and unique — the backend rejects otherwise.
+    const memberAddrs = members.map((mb) => mb.address.trim());
+    if (memberAddrs.some((a) => !a)) { setError('every committee member needs an address'); return; }
+    const dupeAddr = memberAddrs.find((a, i) => memberAddrs.indexOf(a) !== i);
+    if (dupeAddr) { setError(`duplicate committee member address: ${dupeAddr}`); return; }
+
     setIsSubmitting(true);
     try {
-      const cosmosWallet =
-        wallet?.getWalletOfType?.(CosmosWallet) ??
-        (wallet?.originalWallet as any)?.getWalletByChainType?.('cosmos') ??
-        (typeof (wallet?.originalWallet as any)?.signArbitrary === 'function'
-          ? (wallet.originalWallet as any)
-          : null);
-
-      const committeePayload = {
-        lead_address: address,
-        members: members.map((mb) => ({ address: mb.address, moniker: mb.moniker })),
-        threshold_m: m,
-        total_n: n,
-      };
-      const payloadStr = buildCanonicalActionPayload(committeePayload);
-
-      let stdSig: { pub_key: { value: string }; signature: string };
-      if (cosmosWallet) {
-        stdSig = await cosmosWallet.signArbitrary(signingChainId, address, payloadStr);
-      } else if (typeof (window as any).keplr?.signArbitrary === 'function') {
-        stdSig = await (window as any).keplr.signArbitrary(signingChainId, address, payloadStr);
-      } else {
-        throw new Error('No Cosmos wallet found');
-      }
-
-      const finalMembers = members.map((mb, i) =>
-        i === 0 ? { ...mb, pubKeyB64: stdSig.pub_key.value } : mb,
-      );
-
+      // No signature is needed at committee creation — members register their pubkey when they first
+      // sign a proposal (the ADR-036 envelope carries it). See plan-chaincoord-committee-pubkeys.md.
       await replaceCommittee.mutateAsync({
         id: launchId,
         data: {
-          members: finalMembers.map((mb) => ({
+          members: members.map((mb) => ({
             address: mb.address.trim(),
             moniker: mb.moniker.trim(),
             pub_key_b64: mb.pubKeyB64,
@@ -1313,7 +1293,6 @@ function ReplaceCommitteeSection({
           threshold_m: m,
           total_n: n,
           lead_address: address,
-          creation_signature: stdSig.signature,
         },
       });
 

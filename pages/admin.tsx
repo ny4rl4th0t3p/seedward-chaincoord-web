@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box, Text } from '@interchain-ui/react';
 import { Button } from '@/components';
 import { useAuth } from '@/contexts';
+import { accountToBech32, bech32Prefix } from '@/utils/address';
 import {
   useGetAdminCoordinators,
   usePostAdminCoordinators,
@@ -71,6 +72,10 @@ export default function AdminPage() {
 // ── Coordinator Allowlist ─────────────────────────────────────────────────────
 
 function CoordinatorAllowlistSection() {
+  const { operatorAddress } = useAuth();
+  // The global coordinator allowlist stores canonical account hex; render it under the viewer's own
+  // wallet prefix so the display matches the bech32 an admin enters (see accountToBech32).
+  const viewerPrefix = bech32Prefix(operatorAddress);
   const { data, isLoading, error: listError, refetch } = useGetAdminCoordinators({
     page: 1,
     per_page: 100,
@@ -159,34 +164,37 @@ function CoordinatorAllowlistSection() {
         <Text fontSize="$xs" color="$textSecondary">No coordinators on the allowlist.</Text>
       ) : (
         <Box display="flex" flexDirection="column" gap="8px">
-          {entries.map((e) => (
-            <Box
-              key={e.address}
-              display="flex"
-              justifyContent="space-between"
-              alignItems="center"
-              borderRadius="6px"
-              border="1px solid"
-              borderColor="$divider"
-              px="12px"
-              py="8px"
-            >
-              <Box>
-                <Text fontSize="$sm" fontFamily="monospace">{e.address}</Text>
-                <Text fontSize="$xs" color="$textSecondary">
-                  Added by {e.added_by || '—'}{e.added_at ? ` · ${new Date(e.added_at).toLocaleString()}` : ''}
-                </Text>
-              </Box>
-              <Button
-                variant="text"
-                size="sm"
-                onClick={() => handleRemove(e.address ?? '')}
-                disabled={removingAddr === e.address}
+          {entries.map((e) => {
+            const display = accountToBech32(e.address, viewerPrefix);
+            return (
+              <Box
+                key={e.address}
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+                borderRadius="6px"
+                border="1px solid"
+                borderColor="$divider"
+                px="12px"
+                py="8px"
               >
-                {removingAddr === e.address ? '…' : 'Remove'}
-              </Button>
-            </Box>
-          ))}
+                <Box>
+                  <Text fontSize="$sm" fontFamily="monospace">{display}</Text>
+                  <Text fontSize="$xs" color="$textSecondary">
+                    Added by {e.added_by || '—'}{e.added_at ? ` · ${new Date(e.added_at).toLocaleString()}` : ''}
+                  </Text>
+                </Box>
+                <Button
+                  variant="text"
+                  size="sm"
+                  onClick={() => handleRemove(display)}
+                  disabled={removingAddr === display}
+                >
+                  {removingAddr === display ? '…' : 'Remove'}
+                </Button>
+              </Box>
+            );
+          })}
         </Box>
       )}
     </AdminCard>

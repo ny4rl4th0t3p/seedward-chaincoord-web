@@ -9,7 +9,6 @@ import type { ApiCommitteeMemberJSON } from './apiCommitteeMemberJSON';
 
 export interface ApiCommitteeJSON {
   created_at?: string;
-  creation_signature?: string;
   id?: string;
   lead_address?: string;
   members?: ApiCommitteeMemberJSON[];

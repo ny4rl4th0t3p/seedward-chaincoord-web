@@ -5,9 +5,10 @@ import { createLaunch } from '../helpers/launch';
 
 // K.3 — Create launch
 
-test('K.3.1 /launch/new redirects to index when not authenticated', async ({ page }) => {
+test('K.3.1 /launch/new shows the auth wall when not authenticated', async ({ page }) => {
   await page.goto('/launch/new');
-  await expect(page).toHaveURL('/', { timeout: 5_000 });
+  // The app shell gates unauthenticated requests — the page never mounts.
+  await expect(page.getByText(/you need to be signed in to view this section/i)).toBeVisible({ timeout: 10_000 });
 });
 
 test('K.3.2 submit without chain_id shows error', async ({ page }) => {

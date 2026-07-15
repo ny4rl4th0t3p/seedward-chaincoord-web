@@ -23,6 +23,13 @@ web_pin="$(tr -d '[:space:]' < "$PIN_FILE")"
 [ -n "$web_pin" ] || die "pin file is empty: ${PIN_FILE}"
 echo "web WASM pin (scripts/wasm-version.txt): ${web_pin}"
 
+# WHY resolve chaincoord and not seedward-libs? The WASM binary is BUILT in seedward-libs, but this
+# gate protects a different property: the browser's advisory validator (RunLight) must match the
+# version the AUTHORITATIVE server (coordd, RunAll) validates with — else the browser could green-light
+# a gentx the server rejects (or vice-versa). So coordd's go.mod at its latest release — not libs'
+# latest tag — is the source of truth for which libs version the web must pin to. Pinning to
+# libs-latest would actively cause the drift this check exists to prevent (coordd can lag libs).
+#
 # Latest coordd release = latest semver tag (Go module versions ARE tags — no GitHub "Release" needed).
 # NOTE: sort -V ranks a prerelease (v1.0.0-rc1) above its final (v1.0.0); harmless while coordd has no
 # ambiguous rc+final pair for the same version — revisit if that changes.

@@ -150,7 +150,6 @@ function makeCommittee(overrides?: Partial<ApiCommitteeJSON>): ApiCommitteeJSON 
     threshold_m: 1,
     total_n: 1,
     lead_address: ADDRESS,
-    creation_signature: 'testsig==',
     created_at: '2026-01-01T00:00:00Z',
     ...overrides,
   };

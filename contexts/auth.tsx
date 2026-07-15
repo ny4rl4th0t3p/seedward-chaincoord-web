@@ -21,6 +21,9 @@ export interface AuthState {
   /** Chain-registry name of the chain used for the current session (e.g. 'cosmoshub'). */
   chainName: string | null;
   isAuthenticated: boolean;
+  /** False until the session-restore effect has run once; gates the app shell to avoid flashing
+   *  the auth wall at a returning (already-signed-in) user on first paint. */
+  initialized: boolean;
   isCoordinator: boolean;
   isPending: boolean;
   error: string | null;
@@ -59,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isCoordinator, setIsCoordinator] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   // Keep a ref to the token for use in logout without stale closure issues.
   const tokenRef = useRef<string | null>(null);
@@ -70,15 +74,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedToken = sessionStorage.getItem('coord_auth_token');
     const storedAddress = sessionStorage.getItem('coord_auth_address');
     const storedChain = sessionStorage.getItem('coord_auth_chain');
-    if (!storedToken || !storedAddress) return;
-    setToken(storedToken);
-    setOperatorAddress(storedAddress);
-    setChainName(storedChain);
-    // Fetch coordinator status in the background.
-    fetch(`${API_BASE}/auth/session`, { headers: { Authorization: `Bearer ${storedToken}` } })
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data) setIsCoordinator(data.is_coordinator === true); })
-      .catch(() => {});
+    if (storedToken && storedAddress) {
+      setToken(storedToken);
+      setOperatorAddress(storedAddress);
+      setChainName(storedChain);
+      // Fetch coordinator status in the background.
+      fetch(`${API_BASE}/auth/session`, { headers: { Authorization: `Bearer ${storedToken}` } })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (data) setIsCoordinator(data.is_coordinator === true); })
+        .catch(() => {});
+    }
+    // Auth state is now determined (restored or confirmed absent) — batched with the setters above
+    // in this one effect, so the shell never renders an intermediate "unauthenticated" frame.
+    setInitialized(true);
   }, []);
 
   const login = useCallback(
@@ -236,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     operatorAddress,
     chainName,
     isAuthenticated: token !== null,
+    initialized,
     isCoordinator,
     isPending,
     error,

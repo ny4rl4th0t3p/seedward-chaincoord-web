@@ -11,6 +11,11 @@ export interface ServicesSignInput {
   coordinator_address?: string;
   decision?: ProposalDecision;
   nonce?: string;
+  /**
+     * PubKeyB64 is the signer's compressed secp256k1 pubkey from the ADR-036 StdSignature envelope.
+     * The verifier asserts it derives to CoordinatorAddr, so it cannot be spoofed.
+     */
+  pubkey_b64?: string;
   signature?: string;
   timestamp?: string;
 }

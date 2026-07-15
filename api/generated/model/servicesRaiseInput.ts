@@ -13,6 +13,11 @@ export interface ServicesRaiseInput {
   coordinator_address?: string;
   nonce?: string;
   payload?: ServicesRaiseInputPayload;
+  /**
+     * PubKeyB64 is the signer's compressed secp256k1 pubkey from the ADR-036 StdSignature envelope.
+     * The verifier asserts it derives to CoordinatorAddr, so it cannot be spoofed.
+     */
+  pubkey_b64?: string;
   signature?: string;
   timestamp?: string;
 }

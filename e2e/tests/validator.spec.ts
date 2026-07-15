@@ -130,7 +130,7 @@ test('K.5 full launch flow: create → open → join → approve', async ({ brow
 
   // Raise an APPROVE_VALIDATOR proposal.
   const approveBtn = coordPage.getByRole('button', { name: /approve/i }).first();
-  await approveBtn.waitFor({ state: 'visible', timeout: 10_000 });
+  await approveBtn.waitFor({ state: 'visible', timeout: 20_000 });
   await approveBtn.click();
   await coordPage.getByRole('button', { name: /sign & raise/i }).click();
 

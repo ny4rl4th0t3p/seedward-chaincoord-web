@@ -21,6 +21,11 @@ const AUDIT_KEY_B64 = Buffer.alloc(32, 0x04).toString('base64');
 const COORDD_BIN =
   process.env.COORDD_BIN ?? join(__dirname, '../../../seedward-chaincoord/bin/coordd');
 
+// Optional container mode: set COORDD_IMAGE to a published image (e.g. a GHCR tag) to run coordd via
+// `docker run` instead of a local binary — no Go toolchain or sibling checkout needed.
+const COORDD_IMAGE = process.env.COORDD_IMAGE;
+export const CONTAINER_NAME = 'seedward-coordd-e2e';
+
 const GENESIS_PATH = join(tmpdir(), 'playwright-coordd-genesis');
 
 export function coorddEnv(coordinatorAddr: string): NodeJS.ProcessEnv {
@@ -37,12 +42,29 @@ export function coorddEnv(coordinatorAddr: string): NodeJS.ProcessEnv {
     COORD_INSECURE_NO_RATE_LIMIT: 'true',
     COORD_INSECURE_NO_SSRF_CHECK: 'true',
     COORD_CORS_ORIGINS: 'http://localhost:3000',
-    COORD_LAUNCH_POLICY: 'open',
+    // launch_policy defaults to "restricted" (the realistic/production value); the seeded coordinator
+    // allowlist (below) is what lets the test coordinator create launches.
     COORD_LOG_LEVEL: 'warn',
   };
 }
 
 export default async function globalSetup(): Promise<void> {
+  await initKeypairs();
+  const coordAddr = coordinator().address('cosmos');
+
+  if (COORDD_IMAGE) {
+    startCoorddContainer(coordAddr);
+  } else {
+    await startCoorddBinary(coordAddr);
+  }
+
+  await waitForServer(COORDD_PORT);
+  // Seed the coordinator allowlist so the test coordinator can create launches.
+  await seedCoordinatorAllowlist(coordAddr);
+}
+
+// ── Local-binary mode (default) ──────────────────────────────────────────────────
+async function startCoorddBinary(coordAddr: string): Promise<void> {
   // Kill any stale coordd from a previous interrupted run that didn't reach globalTeardown.
   if (existsSync(PID_FILE)) {
     const stalePid = parseInt(readFileSync(PID_FILE, 'utf8').trim(), 10);
@@ -56,9 +78,6 @@ export default async function globalSetup(): Promise<void> {
   }
   try { if (existsSync(GENESIS_PATH)) rmSync(GENESIS_PATH, { recursive: true }); } catch { /* ignore */ }
 
-  await initKeypairs();
-
-  const coordAddr = coordinator().address('cosmos');
   const env = coorddEnv(coordAddr);
 
   // Run migrations (synchronous — must complete before serve starts).
@@ -79,11 +98,48 @@ export default async function globalSetup(): Promise<void> {
       `coordd exited early (code ${proc.exitCode}) — port ${COORDD_PORT} may still be in use.\n${startupError}`,
     );
   }
+}
 
-  await waitForServer(COORDD_PORT);
+// ── Container mode (COORDD_IMAGE) ────────────────────────────────────────────────
+// Runs coordd from a published image (e.g. a GHCR release tag) with `docker run` — no local build.
+// The container is ephemeral (fresh DB each run); one `sh -c` chains migrate → serve since the image
+// has no combined entrypoint. globalTeardown removes it.
+function startCoorddContainer(coordAddr: string): void {
+  // Remove any stale container from an interrupted run.
+  spawnSync('docker', ['rm', '-f', CONTAINER_NAME], { stdio: 'ignore' });
 
-  // Seed the coordinator allowlist so the test coordinator can create launches.
-  await seedCoordinatorAllowlist(coordAddr);
+  const env: Record<string, string> = {
+    COORD_LISTEN_ADDR: `:${COORDD_PORT}`,
+    COORD_DB_PATH: '/tmp/coordd.db',
+    COORD_AUDIT_LOG_PATH: '/tmp/coordd-audit.jsonl',
+    COORD_FILES_PATH: '/tmp/coordd-files',
+    COORD_JWT_PRIVATE_KEY: JWT_KEY_B64,
+    COORD_AUDIT_PRIVATE_KEY: AUDIT_KEY_B64,
+    COORD_ADMIN_ADDRESSES: coordAddr,
+    COORD_INSECURE_NO_TLS: 'true',
+    COORD_INSECURE_NO_RATE_LIMIT: 'true',
+    COORD_INSECURE_NO_SSRF_CHECK: 'true',
+    COORD_CORS_ORIGINS: 'http://localhost:3000',
+    // launch_policy defaults to "restricted" (the realistic/production value); the seeded coordinator
+    // allowlist (below) is what lets the test coordinator create launches.
+    COORD_LOG_LEVEL: 'warn',
+  };
+  const envFlags = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
+
+  const run = spawnSync('docker', [
+    'run', '-d', '--name', CONTAINER_NAME,
+    '-p', `${COORDD_PORT}:${COORDD_PORT}`,
+    // Put the sqlite DB on a RAM tmpfs — the overlay filesystem is slow enough for sqlite that
+    // requests lag and the browser aborts them ("context canceled" 500s), flaking timing tests.
+    '--tmpfs', '/tmp:rw,size=256m',
+    ...envFlags,
+    '--entrypoint', 'sh',
+    COORDD_IMAGE!,
+    '-c', 'coordd migrate && coordd serve',
+  ], { encoding: 'utf8' });
+  if (run.status !== 0) {
+    throw new Error(`docker run (${COORDD_IMAGE}) failed:\n${run.stderr || run.stdout}`);
+  }
 }
 
 async function waitForServer(port: number, timeoutMs = 10_000): Promise<void> {

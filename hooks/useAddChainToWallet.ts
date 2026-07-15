@@ -63,6 +63,7 @@ export function useAddChainToWallet(launchId: string): UseAddChainToWalletResult
     } catch (err) {
       // getLaunchIdChainHint throws coordd's error envelope ({ error: { message } }) — a plain
       // object, not an Error — on non-2xx; surface its message, else fall back for real Errors.
+      // (The unauthenticated landing shows a uniform non-leaking prompt instead of this message.)
       const message =
         err instanceof Error
           ? err.message

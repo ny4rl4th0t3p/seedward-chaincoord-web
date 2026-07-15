@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { Box, Text } from '@interchain-ui/react';
-import { useChain } from '@interchain-kit/react';
-import { CosmosWallet } from '@interchain-kit/core';
 import { Button } from '@/components';
 import { useAuth } from '@/contexts';
 import { usePostLaunch } from '@/api/generated/launches/launches';
 import type { ApiCreateLaunchRequest, ApiErrorEnvelope } from '@/api/generated/model';
-import { buildCanonicalActionPayload } from '@/utils/signedAction';
 
 // ── Auth gate ─────────────────────────────────────────────────────────────────
 
@@ -21,7 +18,7 @@ export default function CreateLaunchPage() {
 
   if (!isAuthenticated || !chainName) return null;
 
-  return <CreateLaunchForm chainName={chainName} />;
+  return <CreateLaunchForm />;
 }
 
 // ── Form ──────────────────────────────────────────────────────────────────────
@@ -32,10 +29,8 @@ interface MemberInput {
   pubKeyB64: string;
 }
 
-function CreateLaunchForm({ chainName }: { chainName: string }) {
+function CreateLaunchForm() {
   const { operatorAddress } = useAuth();
-  const { wallet, chain } = useChain(chainName);
-  const signingChainId = chain.chainId as string;
   const createLaunch = usePostLaunch();
   const router = useRouter();
 
@@ -66,6 +61,10 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
 
   const [thresholdM, setThresholdM] = useState('1');
   const [totalN, setTotalN] = useState('1');
+  // members[0] is the committee lead: the backend requires Members[0] == lead_address (enforced by
+  // launch.New / SetCommittee, 400 otherwise). We pin both to the connected wallet for a self-run
+  // launch; a future delegation UI would instead set member[0] AND lead_address to the delegate
+  // (the creator need not be on the committee — only the coordinator allowlist gates creation).
   const [members, setMembers] = useState<MemberInput[]>([
     { address: operatorAddress ?? '', moniker: '', pubKeyB64: '' },
   ]);
@@ -105,7 +104,7 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
     setIsSubmitting(true);
 
     try {
-      // Validate required fields before signing
+      // Validate required fields
       if (!chainId.trim()) throw new Error('chain_id is required');
       if (!bech32Prefix.trim()) throw new Error('bech32_prefix is required');
       if (!binaryName.trim()) throw new Error('binary_name is required');
@@ -117,42 +116,14 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
       if (m < 1 || m > n) throw new Error(`threshold_m must be between 1 and ${n}`);
       if (members.length !== n) throw new Error(`member count (${members.length}) must equal total_n (${n})`);
 
-      // Build committee payload for signing (lead signs over members + thresholds)
-      const committeePayload = {
-        lead_address: operatorAddress!,
-        members: members.map((mb) => ({ address: mb.address, moniker: mb.moniker })),
-        threshold_m: m,
-        total_n: n,
-      };
-      const payloadStr = buildCanonicalActionPayload(committeePayload);
+      // Committee member addresses must be present and unique — the backend rejects otherwise (raw 400).
+      const memberAddrs = members.map((mb) => mb.address.trim());
+      if (memberAddrs.some((a) => !a)) throw new Error('every committee member needs an address');
+      const dupeAddr = memberAddrs.find((a, i) => memberAddrs.indexOf(a) !== i);
+      if (dupeAddr) throw new Error(`duplicate committee member address: ${dupeAddr}`);
 
-      // Get a signer — prefer interchain-kit wallet, fall back to window.keplr
-      // (duck-type fallbacks handle multi-copy npm installs where instanceof breaks)
-      let stdSig: { pub_key: { value: string }; signature: string };
-      if (wallet) {
-        const cosmosWallet =
-          wallet.getWalletOfType(CosmosWallet) ??
-          (wallet.originalWallet as any)?.getWalletByChainType?.('cosmos') ??
-          (typeof (wallet.originalWallet as any)?.signArbitrary === 'function'
-            ? (wallet.originalWallet as any)
-            : null);
-        if (!cosmosWallet) throw new Error('No Cosmos wallet found — connect your wallet first');
-        stdSig = await cosmosWallet.signArbitrary(signingChainId, operatorAddress!, payloadStr);
-      } else if (typeof (window as any).keplr?.signArbitrary === 'function') {
-        stdSig = await (window as any).keplr.signArbitrary(signingChainId, operatorAddress!, payloadStr);
-      } else {
-        throw new Error('No Cosmos wallet found — connect your wallet first');
-      }
-
-      const leadPubKeyB64 = stdSig.pub_key.value;
-      const creationSignature = stdSig.signature;
-
-      // Build final members with lead pub key filled in
-      const finalMembers = members.map((mb, i) =>
-        i === 0
-          ? { ...mb, pubKeyB64: leadPubKeyB64 }
-          : mb,
-      );
+      // No signature is needed at creation — committee members register their pubkey when they first
+      // sign a proposal (the ADR-036 envelope carries it). See plan-chaincoord-committee-pubkeys.md.
 
       // Initial members list — launches are private-always, so these addresses (plus the committee)
       // are who may see the launch and submit. One address per line or comma-separated.
@@ -182,7 +153,7 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
         launch_type: launchType.toUpperCase(),
         allowlist,
         committee: {
-          members: finalMembers.map((mb) => ({
+          members: members.map((mb) => ({
             address: mb.address.trim(),
             moniker: mb.moniker.trim(),
             pub_key_b64: mb.pubKeyB64,
@@ -190,7 +161,6 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
           threshold_m: m,
           total_n: n,
           lead_address: operatorAddress!,
-          creation_signature: creationSignature,
         },
       };
 
@@ -349,6 +319,26 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
 
       {/* ── Committee ── */}
       <FormSection title="Committee">
+        {/* Plain-language explainer for the coordinator / committee / lead roles. */}
+        <Box
+          borderRadius="6px"
+          border="1px solid"
+          borderColor="$divider"
+          backgroundColor="$cardBg"
+          p="12px"
+          attributes={{ style: { marginBottom: 12 } }}
+        >
+          <Text fontSize="$sm" fontWeight="$semibold" attributes={{ mb: '4px' }}>
+            Committee &amp; roles
+          </Text>
+          <Text fontSize="$xs" color="$textSecondary">
+            You can create launches because your address is a Coordinator (on the coordinator allowlist).
+            Each launch is run by a Committee — any M of its N members must jointly sign to approve actions
+            such as admitting validators, publishing genesis, or changing config. The Lead is committee
+            member #1. This form pins the lead to your connected wallet; naming a different account as the
+            lead is not supported here yet.
+          </Text>
+        </Box>
         <Row>
           <Field label="Threshold M *">
             <TextInput value={thresholdM} onChange={setThresholdM} placeholder="1" type="number" />
@@ -377,7 +367,7 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
         </Row>
 
         <Text fontSize="$xs" color="$textSecondary" attributes={{ mb: '8px' }}>
-          Members — your address (lead) is pre-filled. The public key is captured automatically when you submit.
+          Members — member #1 (the lead) is pinned to your connected wallet.
         </Text>
 
         {members.map((mb, idx) => (
@@ -394,7 +384,7 @@ function CreateLaunchForm({ chainName }: { chainName: string }) {
           >
             <Box display="flex" justifyContent="space-between" alignItems="center">
               <Text fontSize="$xs" color="$textSecondary">
-                {idx === 0 ? 'Lead (you)' : `Member ${idx + 1}`}
+                {idx === 0 ? 'Lead — member #1 (this wallet)' : `Member ${idx + 1}`}
               </Text>
               {idx > 0 && (
                 <Button variant="text" size="sm" onClick={() => removeMember(idx)}>

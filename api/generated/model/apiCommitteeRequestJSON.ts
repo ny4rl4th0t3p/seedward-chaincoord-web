@@ -8,7 +8,6 @@
 import type { ApiCommitteeMemberJSON } from './apiCommitteeMemberJSON';
 
 export interface ApiCommitteeRequestJSON {
-  creation_signature?: string;
   lead_address?: string;
   members?: ApiCommitteeMemberJSON[];
   threshold_m?: number;

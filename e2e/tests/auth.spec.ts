@@ -1,17 +1,16 @@
 import { test, expect } from '../fixtures/test';
 import { coordinator } from '../fixtures/keypairs';
 import { loginAs, getJwt, invalidateJwt } from '../helpers/auth';
-import { installWalletStub } from '../helpers/wallet-stub';
 import { COORDD_PORT } from '../setup/global-setup';
 
 // K.1 — Auth flows
 
-test('K.1.1 unauthenticated visit to /launch/:id shows two-path card', async ({ page }) => {
-  // Use a real-looking but non-existent UUID — the landing renders before any fetch.
+test('K.1.1 unauthenticated visit to /launch/:id shows only the auth wall', async ({ page }) => {
   await page.goto('/launch/00000000-0000-0000-0000-000000000001');
-  // Next.js router.query populates after hydration — give it up to 15s.
-  await expect(page.getByText(/coordinator or returning user/i)).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('button', { name: /join as validator/i })).toBeVisible();
+  // The whole app shell is gated: an unauthenticated user gets ONLY the wall — no page content
+  // mounts, so nothing is revealed (uniform whether the launch exists or not).
+  await expect(page.getByText(/you need to be signed in to view this section/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('button', { name: /connect wallet/i })).toBeVisible();
 });
 
 test('K.1.2 coordinator signs in → isCoordinator=true → New Launch button visible', async ({ page }) => {
@@ -64,27 +63,8 @@ test('K.1.4 Revoke All Sessions signs out and rejects old JWT', async ({ page })
   await invalidateJwt(coordinator(), 'cosmos');
 });
 
-test('K.1.5 unauthenticated landing shows validator path → Add Chain card', async ({ page }) => {
-  await installWalletStub(page, coordinator());
-  await page.goto('/launch/00000000-0000-0000-0000-000000000001');
-
-  await page.getByRole('button', { name: /join as validator/i }).click();
-
-  // The "Add Chain to Wallet" step card should appear.
-  await expect(page.getByText(/add chain to wallet/i).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /add chain to wallet/i })).toBeVisible();
-});
-
-test('K.1.5b invalid launch ID shows chain-hint 404 error on addChain', async ({ page }) => {
-  await installWalletStub(page, coordinator());
-  await page.goto('/launch/00000000-0000-0000-0000-000000000001');
-  await page.getByRole('button', { name: /join as validator/i }).click();
-
-  await page.getByRole('button', { name: /add chain to wallet/i }).click();
-
-  // Fake launch ID → chain-hint returns 404 → error shown.
-  await expect(page.getByText(/404/i)).toBeVisible({ timeout: 5_000 });
-});
+// K.1.5 / K.1.5b (pre-auth "Add Chain to Wallet" validator onboarding) removed — the app shell now
+// gates every unauthenticated request to the auth wall (see K.1.1), so there is no pre-auth flow.
 
 // Sanity check: /auth/session endpoint returns is_coordinator=true for the coordinator.
 test('K.1.6 GET /auth/session reflects is_coordinator correctly', async () => {
