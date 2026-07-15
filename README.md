@@ -25,7 +25,7 @@ yarn install
 yarn dev            # http://localhost:3000
 ```
 
-Point the app at a running `coordd` by setting the API base URL (see `.env.example` / `config/`). To bring up a local
+Point the app at a running `coordd` by setting the API base URL (see `config/`). To bring up a local
 coordd, follow the [seedward-chaincoord quickstart](https://github.com/ny4rl4th0t3p/seedward-chaincoord).
 
 ## API client
@@ -36,15 +36,49 @@ the client can't silently drift, and **`gen:api` needs no coordd checkout** (it 
 
 Refreshing the vendored spec (a maintainer step, when the API changes) is `yarn sync:spec`, which copies coordd's
 `docs/mkdocs/api/swagger.yaml`. It defaults to a sibling `../seedward-chaincoord` checkout; point it anywhere with
-`COORDD_SPEC=/path/to/swagger.yaml yarn sync:spec`. _(Codegen pipeline landing as part of the web-extraction milestone.)_
+`COORDD_SPEC=/path/to/swagger.yaml yarn sync:spec`. CI regenerates the client and **fails if it drifts** from the
+committed spec.
 
 ## Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `yarn dev` | Run the dev server (live reload) |
-| `yarn build` / `yarn start` | Production build / serve |
-| `yarn lint` | ESLint (next lint) |
-| `yarn test` | Unit tests (jest) |
-| `yarn playwright` | End-to-end tests (playwright) |
-| `yarn gen:api` | Regenerate the API client from the vendored spec |
+| Script                      | Purpose                                                         |
+|-----------------------------|-----------------------------------------------------------------|
+| `yarn dev`                  | Run the dev server (live reload)                                |
+| `yarn build` / `yarn start` | Production build / serve                                        |
+| `yarn lint`                 | ESLint (next lint)                                              |
+| `yarn test`                 | Unit tests (jest)                                               |
+| `yarn playwright`           | End-to-end tests (playwright)                                   |
+| `yarn gen:api`              | Regenerate the API client from the vendored spec                |
+| `yarn sync:spec`            | Refresh the vendored OpenAPI spec from coordd (maintainer step) |
+| `yarn sync:wasm`            | Vendor the pinned gentxvalidate WASM validator (`public/wasm/`) |
+| `yarn check:wasm-version`   | Verify the vendored WASM pin matches coordd's seedward-libs     |
+
+## Authentication
+
+Coordinators and validators authenticate by signing a server challenge with their wallet's `signArbitrary`
+(Cosmos SDK ADR-036) — no keys leave the browser. The server returns a short-lived JWT held in
+`sessionStorage`.
+
+## Client-side gentx validation
+
+The gentx form runs an **advisory** validation in the browser before submit, using the `gentxvalidate` WASM
+build (vendored under `public/wasm/` by `yarn sync:wasm`, lazy-loaded). It shows the same per-invariant
+breakdown the server returns, so a validator sees structural / param problems as they paste. It never
+blocks submit — the server re-validates authoritatively.
+
+## Testing
+
+- `yarn test` — jest unit tests.
+- `yarn playwright` — end-to-end tests against a **real coordd**: Playwright's global setup runs one either
+  from a sibling binary (`COORDD_BIN`, default `../seedward-chaincoord/bin/coordd`) or, with `COORDD_IMAGE`
+  set, from a published GHCR image via `docker run` (no Go toolchain —
+  `COORDD_IMAGE=ghcr.io/ny4rl4th0t3p/seedward-chaincoord:1.0.0-rc2`).
+
+## Design decisions
+
+Repo-internal decisions (the orval/mutator contract, the WASM lazy-loader, the CI drift gates, the e2e
+coordd coupling) are in [`docs/decisions.md`](docs/decisions.md); cross-cutting ones are in the suite ADR log.
+
+## Possible next additions
+
+- **Pagination UI** for the join queue and proposal list (currently `per_page=100`, no pager).
