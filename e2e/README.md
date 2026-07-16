@@ -25,6 +25,7 @@ matters is the group/number map below. Every test here belongs to it, numbered `
 | `K.10` | Grouped-by-submitter join view                           | `grouped-join.spec.ts`                     |
 | `K.11` | Proposal deep-link detail page                           | `proposal-detail.spec.ts`                  |
 | `K.12` | SSE live event feed (authenticated fetch stream)         | `sse-live-feed.spec.ts`                    |
+| `K.13` | Governed cancel (CANCEL_LAUNCH proposal past PUBLISHED)  | `propose-cancel.spec.ts`                   |
 
 Conventions:
 

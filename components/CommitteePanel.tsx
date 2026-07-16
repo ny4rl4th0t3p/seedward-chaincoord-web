@@ -658,12 +658,20 @@ interface CommitteeActionsSectionProps {
   launchId: string;
   launch: ApiLaunchJSON;
   isLead: boolean;
+  isCommitteeMember: boolean;
+  address: string;
+  wallet: StatefulWallet;
+  signingChainId: string;
 }
 
 function CommitteeActionsSection({
   launchId,
   launch,
   isLead,
+  isCommitteeMember,
+  address,
+  wallet,
+  signingChainId,
 }: CommitteeActionsSectionProps) {
   const queryClient = useQueryClient();
 
@@ -672,11 +680,18 @@ function CommitteeActionsSection({
   const [openWindowError, setOpenWindowError] = useState<string | null>(null);
   const openWindow = usePostLaunchIdOpenWindow();
 
-  // Cancel launch
+  // Cancel launch — direct path (lead, DRAFT/PUBLISHED).
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const cancelLaunch = usePostLaunchIdCancel();
+
+  // Cancel launch — governed path (past PUBLISHED, or any non-lead member): raises a CANCEL_LAUNCH proposal.
+  const [proposeCancelBusy, setProposeCancelBusy] = useState(false);
+  const [proposeCancelError, setProposeCancelError] = useState<string | null>(null);
+  const [proposeCancelConfirm, setProposeCancelConfirm] = useState(false);
+  const [proposeCancelRaised, setProposeCancelRaised] = useState(false);
+  const raiseProposal = usePostLaunchIdProposal();
 
   // Monitor RPC
   const [monitorRPC, setMonitorRPC] = useState(launch.monitor_rpc_url ?? '');
@@ -739,6 +754,28 @@ function CommitteeActionsSection({
       setCancelError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
     } finally {
       setCancelBusy(false);
+    }
+  };
+
+  const handleProposeCancel = async () => {
+    setProposeCancelBusy(true);
+    setProposeCancelError(null);
+    try {
+      const body = {
+        action_type: 'CANCEL_LAUNCH',
+        payload: {},
+        member_address: address,
+      };
+      const signed = await buildSignedAction(body, wallet, signingChainId, address);
+      await raiseProposal.mutateAsync({ id: launchId, data: signed as unknown as ServicesRaiseInput });
+      queryClient.invalidateQueries();
+      setProposeCancelConfirm(false);
+      setProposeCancelRaised(true);
+    } catch (err) {
+      const env = err as ApiErrorEnvelope;
+      setProposeCancelError(env.error?.message ?? (err instanceof Error ? err.message : 'Unexpected error'));
+    } finally {
+      setProposeCancelBusy(false);
     }
   };
 
@@ -928,8 +965,8 @@ function CommitteeActionsSection({
           </Button>
         </Box>
 
-        {/* Cancel launch — lead only, non-terminal status */}
-        {isLead && launch.status !== 'LAUNCHED' && launch.status !== 'CANCELED' && (
+        {/* Cancel — direct path: lead, DRAFT/PUBLISHED (unsigned; coordd rejects a direct cancel later). */}
+        {isLead && (launch.status === 'DRAFT' || launch.status === 'PUBLISHED') && (
           <Box display="flex" flexDirection="column" gap="8px">
             <Text fontSize="$sm" fontWeight="$semibold" color="$textDanger">Cancel Launch</Text>
             <Text fontSize="$xs" color="$textSecondary">
@@ -961,6 +998,49 @@ function CommitteeActionsSection({
             )}
           </Box>
         )}
+
+        {/* Cancel — governed path: any committee member, when the direct path isn't available (past
+            PUBLISHED, or the caller isn't the lead). Raises an M-of-N CANCEL_LAUNCH proposal. */}
+        {isCommitteeMember &&
+          launch.status !== 'LAUNCHED' &&
+          launch.status !== 'CANCELED' &&
+          !(isLead && (launch.status === 'DRAFT' || launch.status === 'PUBLISHED')) && (
+            <Box display="flex" flexDirection="column" gap="8px">
+              <Text fontSize="$sm" fontWeight="$semibold" color="$textDanger">Cancel Launch</Text>
+              <Text fontSize="$xs" color="$textSecondary">
+                Cancellation here is governed by the committee — this raises a CANCEL_LAUNCH proposal that
+                requires M-of-N committee signatures to execute.
+              </Text>
+              {proposeCancelError && (
+                <Text fontSize="$xs" color="$textDanger">{proposeCancelError}</Text>
+              )}
+              {proposeCancelRaised ? (
+                <Text fontSize="$xs" color="$textSecondary">
+                  Cancel proposal raised — it needs M-of-N committee signatures to execute.
+                </Text>
+              ) : !proposeCancelConfirm ? (
+                <Button variant="outline" size="sm" onClick={() => setProposeCancelConfirm(true)}>
+                  Propose Cancel
+                </Button>
+              ) : (
+                <Box display="flex" gap="8px" alignItems="center">
+                  <Text fontSize="$xs" color="$textDanger">Raise a cancel proposal?</Text>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleProposeCancel}
+                    isLoading={proposeCancelBusy}
+                    disabled={proposeCancelBusy}
+                  >
+                    {proposeCancelBusy ? 'Signing…' : 'Sign & Raise'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setProposeCancelConfirm(false)} disabled={proposeCancelBusy}>
+                    Keep Launch
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
 
       </Box>
     </PanelCard>
@@ -1589,12 +1669,17 @@ export function CommitteePanel({
   committee,
   isLead,
 }: CommitteePanelProps) {
+  const isCommitteeMember = (committee.members ?? []).some((m) => sameAccount(m.address ?? '', address));
   return (
     <Box display="flex" flexDirection="column" gap="16px">
       <CommitteeActionsSection
         launchId={launchId}
         launch={launch}
         isLead={isLead}
+        isCommitteeMember={isCommitteeMember}
+        address={address}
+        wallet={wallet}
+        signingChainId={signingChainId}
       />
       <GentxsSection launchId={launchId} />
       <AllocationFilesSection launchId={launchId} />

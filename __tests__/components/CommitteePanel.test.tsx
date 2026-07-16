@@ -626,6 +626,91 @@ describe('CommitteePanel — CommitteeActionsSection (H.10)', () => {
 
     expect(screen.getByText('URL is required.')).toBeInTheDocument();
   });
+
+  // ── Cancel governance: direct (lead, DRAFT/PUBLISHED) vs. M-of-N CANCEL_LAUNCH proposal ──
+
+  it('shows the direct Cancel Launch button for the lead on a DRAFT launch', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CommitteePanel {...defaultProps({ launch: { status: 'DRAFT' }, isLead: true })} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Cancel Launch' }));
+    expect(screen.queryByRole('button', { name: 'Propose Cancel' })).not.toBeInTheDocument();
+  });
+
+  it('shows Propose Cancel (not the direct button) for the lead past PUBLISHED', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(<CommitteePanel {...defaultProps({ launch: { status: 'WINDOW_OPEN' }, isLead: true })} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Propose Cancel' }));
+    expect(screen.queryByRole('button', { name: 'Cancel Launch' })).not.toBeInTheDocument();
+  });
+
+  it('shows Propose Cancel for a non-lead member even in DRAFT (governed early cancel)', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(
+      <CommitteePanel
+        {...defaultProps({
+          launch: { status: 'DRAFT' },
+          isLead: false,
+          committee: {
+            members: [
+              { address: OTHER_COORD, moniker: 'lead' },
+              { address: ADDRESS, moniker: 'me' },
+            ],
+            lead_address: OTHER_COORD,
+            threshold_m: 2,
+            total_n: 2,
+          },
+        })}
+      />,
+    );
+    await waitFor(() => screen.getByRole('button', { name: 'Propose Cancel' }));
+  });
+
+  it('hides both cancel affordances for a non-member', async () => {
+    mockFetch(listRoutes());
+    renderWithClient(
+      <CommitteePanel
+        {...defaultProps({
+          launch: { status: 'WINDOW_OPEN' },
+          isLead: false,
+          committee: {
+            members: [{ address: OTHER_COORD, moniker: 'lead' }],
+            lead_address: OTHER_COORD,
+          },
+        })}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Cancel Launch' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Propose Cancel' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('Propose Cancel raises a CANCEL_LAUNCH proposal with an empty payload, signed', async () => {
+    const fetchMock = mockFetch([
+      { method: 'POST', match: `/launch/${LAUNCH_ID}/proposal`, body: makeProposal({ action_type: 'CANCEL_LAUNCH' }) },
+      ...listRoutes(),
+    ]);
+    renderWithClient(<CommitteePanel {...defaultProps({ launch: { status: 'WINDOW_OPEN' }, isLead: true })} />);
+    await waitFor(() => screen.getByRole('button', { name: 'Propose Cancel' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Propose Cancel' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Sign & Raise' }));
+    });
+
+    const call = fetchMock.mock.calls.find(
+      ([url, init]: [string, RequestInit?]) => url === `/launch/${LAUNCH_ID}/proposal` && init?.method === 'POST',
+    );
+    expect(call).toBeDefined();
+    const body = JSON.parse((call![1] as RequestInit).body as string);
+    expect(body.action_type).toBe('CANCEL_LAUNCH');
+    expect(body.payload).toEqual({});
+    expect(body.member_address).toBe(ADDRESS);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cancel proposal raised/)).toBeInTheDocument();
+    });
+  });
 });
 
 // ── Allocation files ──────────────────────────────────────────────────────────
