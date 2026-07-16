@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { Box, Text } from '@interchain-ui/react';
 import { useChain } from '@interchain-kit/react';
@@ -7,7 +7,7 @@ import { ValidatorPanel } from '@/components/ValidatorPanel';
 import { CommitteePanel } from '@/components/CommitteePanel';
 import { RehearsalResetButton } from '@/components/RehearsalResetButton';
 import { AuditLogSection } from '@/components/AuditLogSection';
-import { useAddChainToWallet } from '@/hooks';
+import { useAddChainToWallet, useLaunchEventStream } from '@/hooks';
 import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
 import { sameAccount } from '@/utils/address';
@@ -157,11 +157,11 @@ function ValidatorConnectAndAuth({ launchId, hint }: { launchId: string; hint: C
 // ── Authenticated detail view ──────────────────────────────────────────────────
 
 function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
-  const { operatorAddress, chainName, logout, revokeAllSessions } = useAuth();
+  const { operatorAddress, chainName, logout, revokeAllSessions, token } = useAuth();
   const [revokeConfirm, setRevokeConfirm] = useState(false);
   const { wallet, chain } = useChain(chainName!);
   const signingChainId = chain.chainId as string;
-  const [sseEvents, setSseEvents] = useState<string[]>([]);
+  const sseEvents = useLaunchEventStream(launchId, token);
 
   // Launch / committee / dashboard via react-query — cached + deduped across the panels; a panel's
   // mutation invalidates these query keys and every consumer refetches (no onUpdated callbacks needed).
@@ -196,30 +196,6 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
       </Button>
     </Box>
   );
-
-  // ── SSE live feed ───────────────────────────────────────────────────────────
-
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-  const { token } = useAuth();
-  const esRef = useRef<EventSource | null>(null);
-
-  useEffect(() => {
-    if (!token) return;
-    const url = `${API_BASE}/launch/${launchId}/events`;
-    const es = new EventSource(url);
-    esRef.current = es;
-
-    es.onmessage = (ev) => {
-      setSseEvents((prev) => [`${new Date().toLocaleTimeString()}: ${ev.data}`, ...prev.slice(0, 49)]);
-    };
-
-    es.onerror = () => {};
-
-    return () => {
-      es.close();
-      esRef.current = null;
-    };
-  }, [launchId, token, API_BASE]);
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
