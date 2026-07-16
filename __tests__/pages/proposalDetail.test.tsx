@@ -87,7 +87,7 @@ describe('ProposalDetailPage', () => {
           proposed_by: 'cosmos1proposer',
           proposed_at: '2026-05-01T00:00:00Z',
           payload: { join_request_id: 'jr1' },
-          signatures: [{ coordinator_address: 'cosmos1signer', decision: 'SIGN' }],
+          signatures: [{ member_address: 'cosmos1signer', decision: 'SIGN' }],
         },
       },
     ]);

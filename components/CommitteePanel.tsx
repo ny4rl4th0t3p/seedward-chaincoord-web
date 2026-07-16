@@ -169,7 +169,7 @@ function ProposalForm({
       const body = {
         action_type: action,
         payload: payloadObj,
-        coordinator_address: address,
+        member_address: address,
       };
 
       const signed = await buildSignedAction(body, wallet, signingChainId, address);
@@ -502,7 +502,7 @@ function ProposalListSection({
     setSigningState((prev) => ({ ...prev, [pid]: 'signing' }));
     try {
       const body = {
-        coordinator_address: address,
+        member_address: address,
         decision,
       };
       const signed = await buildSignedAction(body, wallet, signingChainId, address);
@@ -559,7 +559,7 @@ function ProposalListSection({
         {pendingFirst.map((p) => {
           const pid = p.id ?? '';
           const signatures = p.signatures ?? [];
-          const myDecision = signatures.find((s) => sameAccount(s.coordinator_address, address));
+          const myDecision = signatures.find((s) => sameAccount(s.member_address, address));
           const isPending = p.status === 'PENDING_SIGNATURES';
           const canAct = isPending && !myDecision;
           const state = signingState[pid];
@@ -606,8 +606,8 @@ function ProposalListSection({
               {signatures.length > 0 && (
                 <Box display="flex" flexDirection="column" gap="2px">
                   {signatures.map((s) => (
-                    <Text key={s.coordinator_address} fontSize="$xs" color="$textSecondary">
-                      {s.decision === 'SIGN' ? '✓' : '✗'} {truncate(s.coordinator_address ?? '', 24)}
+                    <Text key={s.member_address} fontSize="$xs" color="$textSecondary">
+                      {s.decision === 'SIGN' ? '✓' : '✗'} {truncate(s.member_address ?? '', 24)}
                     </Text>
                   ))}
                 </Box>
@@ -1223,7 +1223,6 @@ interface ReplaceCommitteeSectionProps {
 interface MemberInput {
   address: string;
   moniker: string;
-  pubKeyB64: string;
 }
 
 function ReplaceCommitteeSection({
@@ -1243,7 +1242,6 @@ function ReplaceCommitteeSection({
     (committee.members ?? []).map((m) => ({
       address: m.address ?? '',
       moniker: m.moniker ?? '',
-      pubKeyB64: m.pub_key_b64 ?? '',
     })),
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1255,7 +1253,7 @@ function ReplaceCommitteeSection({
   }
 
   function addMember() {
-    setMembers((prev) => [...prev, { address: '', moniker: '', pubKeyB64: '' }]);
+    setMembers((prev) => [...prev, { address: '', moniker: '' }]);
     setTotalN((n) => String(Number(n) + 1));
   }
 
@@ -1288,7 +1286,6 @@ function ReplaceCommitteeSection({
           members: members.map((mb) => ({
             address: mb.address.trim(),
             moniker: mb.moniker.trim(),
-            pub_key_b64: mb.pubKeyB64,
           })),
           threshold_m: m,
           total_n: n,
@@ -1338,7 +1335,7 @@ function ReplaceCommitteeSection({
                   if (members.length < n) {
                     setMembers((prev) => [
                       ...prev,
-                      ...Array(n - prev.length).fill(null).map(() => ({ address: '', moniker: '', pubKeyB64: '' })),
+                      ...Array(n - prev.length).fill(null).map(() => ({ address: '', moniker: '' })),
                     ]);
                   } else if (members.length > n && n >= 1) {
                     setMembers((prev) => prev.slice(0, n));

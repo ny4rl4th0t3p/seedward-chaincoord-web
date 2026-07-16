@@ -91,8 +91,8 @@ function ProposalDetail({ launchId, propId }: { launchId: string; propId: string
         ) : (
           <Box display="flex" flexDirection="column" gap="2px">
             {signatures.map((s, i) => (
-              <Text key={s.coordinator_address ?? i} fontSize="$xs" fontFamily="monospace">
-                {s.decision === 'SIGN' ? '✓' : '✗'} {s.coordinator_address ?? ''}
+              <Text key={s.member_address ?? i} fontSize="$xs" fontFamily="monospace">
+                {s.decision === 'SIGN' ? '✓' : '✗'} {s.member_address ?? ''}
               </Text>
             ))}
           </Box>

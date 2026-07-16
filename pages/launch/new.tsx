@@ -26,7 +26,6 @@ export default function CreateLaunchPage() {
 interface MemberInput {
   address: string;
   moniker: string;
-  pubKeyB64: string;
 }
 
 function CreateLaunchForm() {
@@ -66,7 +65,7 @@ function CreateLaunchForm() {
   // launch; a future delegation UI would instead set member[0] AND lead_address to the delegate
   // (the creator need not be on the committee — only the coordinator allowlist gates creation).
   const [members, setMembers] = useState<MemberInput[]>([
-    { address: operatorAddress ?? '', moniker: '', pubKeyB64: '' },
+    { address: operatorAddress ?? '', moniker: '' },
   ]);
 
   // ── Submission state ──────────────────────────────────────────────────────
@@ -88,7 +87,7 @@ function CreateLaunchForm() {
   }
 
   function addMember() {
-    setMembers((prev) => [...prev, { address: '', moniker: '', pubKeyB64: '' }]);
+    setMembers((prev) => [...prev, { address: '', moniker: '' }]);
     setTotalN((n) => String(Number(n) + 1));
   }
 
@@ -156,7 +155,6 @@ function CreateLaunchForm() {
           members: members.map((mb) => ({
             address: mb.address.trim(),
             moniker: mb.moniker.trim(),
-            pub_key_b64: mb.pubKeyB64,
           })),
           threshold_m: m,
           total_n: n,
@@ -354,7 +352,7 @@ function CreateLaunchForm() {
                     ...prev,
                     ...Array(n - prev.length)
                       .fill(null)
-                      .map(() => ({ address: '', moniker: '', pubKeyB64: '' })),
+                      .map(() => ({ address: '', moniker: '' })),
                   ]);
                 } else if (members.length > n && n >= 1) {
                   setMembers((prev) => prev.slice(0, n));
@@ -403,13 +401,6 @@ function CreateLaunchForm() {
               onChange={(v) => updateMember(idx, 'moniker', v)}
               placeholder="Moniker (optional)"
             />
-            {idx > 0 && (
-              <TextInput
-                value={mb.pubKeyB64}
-                onChange={(v) => updateMember(idx, 'pubKeyB64', v)}
-                placeholder="Public key (base64, optional)"
-              />
-            )}
           </Box>
         ))}
 

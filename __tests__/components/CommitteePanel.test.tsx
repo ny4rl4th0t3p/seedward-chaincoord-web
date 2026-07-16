@@ -146,7 +146,7 @@ function makeLaunch(overrides?: Partial<ApiLaunchJSON>): ApiLaunchJSON {
 function makeCommittee(overrides?: Partial<ApiCommitteeJSON>): ApiCommitteeJSON {
   return {
     id: 'dddddddd-0000-0000-0000-000000000004',
-    members: [{ address: ADDRESS, moniker: 'lead', pub_key_b64: 'testpubkey==' }],
+    members: [{ address: ADDRESS, moniker: 'lead' }],
     threshold_m: 1,
     total_n: 1,
     lead_address: ADDRESS,
@@ -314,7 +314,7 @@ describe('CommitteePanel — ProposalForm (H.8)', () => {
     expect(addr).toBe(ADDRESS);
     expect(payload).toMatchObject({
       action_type: 'APPROVE_VALIDATOR',
-      coordinator_address: ADDRESS,
+      member_address: ADDRESS,
       payload: { join_request_id: JR_ID },
     });
 
@@ -387,7 +387,7 @@ describe('CommitteePanel — ProposalListSection (H.9)', () => {
 
   it('renders a ✓ for a signature with decision SIGN', async () => {
     const proposal = makeProposal({
-      signatures: [{ coordinator_address: OTHER_COORD, decision: 'SIGN', timestamp: '2026-05-01T00:00:00Z' }],
+      signatures: [{ member_address: OTHER_COORD, decision: 'SIGN', timestamp: '2026-05-01T00:00:00Z' }],
     });
     mockFetch(listRoutes({ proposalItems: [proposal] }));
     renderWithClient(<CommitteePanel {...defaultProps()} />);
@@ -400,7 +400,7 @@ describe('CommitteePanel — ProposalListSection (H.9)', () => {
 
   it('hides Sign/Veto once the coordinator has already signed', async () => {
     const proposal = makeProposal({
-      signatures: [{ coordinator_address: ADDRESS, decision: 'SIGN', timestamp: '2026-05-01T00:00:00Z' }],
+      signatures: [{ member_address: ADDRESS, decision: 'SIGN', timestamp: '2026-05-01T00:00:00Z' }],
     });
     mockFetch(listRoutes({ proposalItems: [proposal] }));
     renderWithClient(<CommitteePanel {...defaultProps()} />);
@@ -439,7 +439,7 @@ describe('CommitteePanel — ProposalListSection (H.9)', () => {
     expect(call).toBeDefined();
     const body = JSON.parse((call![1] as RequestInit).body as string);
     expect(body.decision).toBe('SIGN');
-    expect(body.coordinator_address).toBe(ADDRESS);
+    expect(body.member_address).toBe(ADDRESS);
   });
 
   it('POSTs decision VETO when Veto is clicked', async () => {
