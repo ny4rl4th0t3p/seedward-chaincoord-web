@@ -30,6 +30,14 @@ export const Footer = () => {
           </Text>
         </Link>
       </Box>
+      {/* App version — inlined at build (NEXT_PUBLIC_APP_VERSION); absent in local `yarn dev`. */}
+      {process.env.NEXT_PUBLIC_APP_VERSION && (
+        <Box display="flex" justifyContent="center" mt="8px">
+          <Text color="$blackAlpha400" fontSize="11px" fontWeight="500">
+            v{process.env.NEXT_PUBLIC_APP_VERSION}
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 };

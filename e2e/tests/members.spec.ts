@@ -15,14 +15,14 @@ test('K.9.1 add a member → appears; remove with confirm → gone', async ({ pa
   await page.getByRole('button', { name: 'Add member' }).click();
 
   // Member row appears (by label).
-  await expect(page.getByText('Test Validator')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Test Validator', { exact: true })).toBeVisible({ timeout: 10_000 });
 
   // Two-step confirm remove.
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(page.getByText('Remove?')).toBeVisible();
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
-  await expect(page.getByText('Test Validator')).not.toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('Test Validator', { exact: true })).not.toBeVisible({ timeout: 10_000 });
 });
 
 test('K.9.2 add member requires an address', async ({ page }) => {
