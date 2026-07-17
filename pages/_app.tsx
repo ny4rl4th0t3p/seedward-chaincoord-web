@@ -1,6 +1,7 @@
 import '../styles/globals.css';
 import '@interchain-ui/react/styles';
 
+import { useEffect, useState } from 'react';
 import type { AppProps } from 'next/app';
 import dynamic from 'next/dynamic';
 import { ChainProvider } from '@interchain-kit/react';
@@ -29,6 +30,15 @@ const queryClient = new QueryClient({
 
 function CreateInterchainApp({ Component, pageProps }: AppProps) {
   const { themeClass } = useTheme();
+
+  // interchain-kit's store (zustand `persist`) reads localStorage at creation time, which throws
+  // during SSR — fatal on Node 24, whose non-functional localStorage global defeats the library's
+  // guard and takes down hydration (every click dead). Pages are fully client-rendered, so mount the
+  // wallet provider tree in the browser only. Server + first client render are both null → no mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return null;
 
   return (
     <CustomThemeProvider>

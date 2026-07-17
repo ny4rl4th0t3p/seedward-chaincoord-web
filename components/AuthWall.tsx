@@ -15,7 +15,9 @@ export function AuthWall() {
       display="flex"
       alignItems="center"
       justifyContent="center"
-      attributes={{ style: { position: 'fixed', inset: 0, zIndex: 1000, padding: '24px' } }}
+      // zIndex: above the app chrome (drawer is 100), but below interchain-ui's overlay layer
+      // (999) — the wallet modal this wall's own Connect button opens must paint on top of it.
+      attributes={{ style: { position: 'fixed', inset: 0, zIndex: 500, padding: '24px' } }}
     >
       <Box display="flex" flexDirection="column" alignItems="center" gap="24px" maxWidth="520px">
         <Text fontSize="$xl" color="$textSecondary" textAlign="center">

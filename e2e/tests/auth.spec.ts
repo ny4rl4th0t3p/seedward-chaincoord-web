@@ -80,3 +80,32 @@ test('K.1.6 GET /auth/session reflects is_coordinator correctly', async () => {
   expect(session.is_coordinator).toBe(true);
   expect(session.operator_address).toBe(coordAddr);
 });
+
+// K.1.7 — wallet-modal smoke test. Regression guard for two bugs that visibility assertions
+// can't catch:
+//   1. Dead hydration (Node 24 SSR localStorage crash): the Connect Wallet click only works if
+//      React actually hydrated — a dead page fails the first click.
+//   2. Occlusion (AuthWall at z-index 1000 painting over the modal overlay at 999): Playwright's
+//      toBeVisible() ignores paint order, so an occluded modal still "looks" visible. Real clicks
+//      are the guard — Playwright refuses to click an element whose action point is covered
+//      ("element intercepts pointer events") and names the covering element.
+// Scope stops before the connect handshake: clicking MetaMask (EVM-only) deterministically lands
+// on the error view ('Unsupported chain type: "cosmos"') without touching any wallet. The full
+// interchain-kit connect flow stays out of e2e — see the loginAs() rationale in helpers/auth.ts.
+test('K.1.7 Connect Wallet on the auth wall opens a clickable wallet modal', async ({ page }) => {
+  await page.goto('/launch/00000000-0000-0000-0000-000000000001');
+  await expect(page.getByText(/you need to be signed in to view this section/i)).toBeVisible({
+    timeout: 15_000,
+  });
+
+  await page.getByRole('button', { name: /connect wallet/i }).click();
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+
+  // The click that toBeVisible() can't fake: the wallet row must actually receive the pointer
+  // event, so anything painted over the modal fails the test here.
+  await dialog.getByText('MetaMask', { exact: true }).click();
+  // The modal reacted to the click: it swapped to the wallet's error view.
+  await expect(dialog.getByRole('button', { name: /change wallet/i })).toBeVisible();
+});
