@@ -12,7 +12,11 @@ COPY . .
 RUN yarn sync:wasm
 # The API client (api/generated) + vendored spec (openapi/swagger.yaml) are committed,
 # so no gen:api/sync:spec is needed here. NEXT_PUBLIC_API_URL is left unset: the client
-# fetches same-origin and Next.js proxies /api,/auth,/launch,… to COORD_BACKEND_URL at runtime.
+# fetches same-origin and Next.js proxies /api,/auth,/launch,… to the backend.
+# `output: 'standalone'` freezes the next.config.js rewrite destinations at BUILD time, so bake
+# a placeholder URL here; docker-entrypoint.sh substitutes the runtime COORD_BACKEND_URL into
+# the serialized server files at container start. The placeholder never serves traffic.
+ENV COORD_BACKEND_URL=http://coord-backend-placeholder:8080
 # NEXT_PUBLIC_APP_VERSION is inlined by Next at build time, so the running app self-reports its version
 # (footer). The publish workflow passes the release tag; a plain `docker build` leaves it "dev".
 ARG NEXT_PUBLIC_APP_VERSION=dev
@@ -31,6 +35,9 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public
+COPY --chmod=755 docker-entrypoint.sh ./
+# WORKDIR created /app root-owned; the entrypoint's `sed -i` needs dir write access for its temp file.
+RUN chown node:node /app
 
 USER node
 
@@ -42,5 +49,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
 
-# Set COORD_BACKEND_URL at runtime (e.g. http://coordd:8080) — the image bakes no backend URL.
+# Set COORD_BACKEND_URL at runtime (e.g. http://coordd:8080); defaults to http://localhost:8080.
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "server.js"]
