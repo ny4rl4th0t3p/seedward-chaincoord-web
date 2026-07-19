@@ -91,4 +91,31 @@ describe('generateNonce', () => {
     const b = generateNonce();
     expect(a).not.toBe(b);
   });
+
+  // Regression: crypto.randomUUID() only exists in a secure context (HTTPS/localhost). Served
+  // over plain HTTP on a LAN IP it's undefined; generateNonce must still produce a UUIDv4 from
+  // getRandomValues rather than throwing "crypto.randomUUID is not a function".
+  describe('insecure context (no crypto.randomUUID)', () => {
+    const realRandomUUID = crypto.randomUUID;
+
+    beforeEach(() => {
+      // @ts-expect-error simulate an insecure context where randomUUID is unavailable
+      crypto.randomUUID = undefined;
+    });
+
+    afterEach(() => {
+      crypto.randomUUID = realRandomUUID;
+    });
+
+    it('falls back to a valid UUIDv4 string', () => {
+      const nonce = generateNonce();
+      expect(nonce).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    });
+
+    it('still returns a different value each call', () => {
+      expect(generateNonce()).not.toBe(generateNonce());
+    });
+  });
 });
