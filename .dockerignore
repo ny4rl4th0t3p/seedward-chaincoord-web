@@ -1,0 +1,16 @@
+# The image installs dependencies and builds from source itself — never ship the host's
+# state into the build context. Without this, COPY . . overwrites the image's freshly
+# installed node_modules with the host's (wrong platform / partial) copy → "next: not found".
+node_modules
+.next
+coverage
+test-results
+playwright-report
+
+# never bake local secrets/config into an image
+.env*
+
+# noise — keeps the context small and the build cache stable
+.git
+.claude
+*.log
