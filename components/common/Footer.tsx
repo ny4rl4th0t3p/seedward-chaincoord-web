@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { FaXTwitter } from 'react-icons/fa6';
 import { Box, Icon, Text } from '@interchain-ui/react';
 
 import { useDetectBreakpoints } from '@/hooks';
@@ -21,12 +20,12 @@ export const Footer = () => {
         gap="4px"
       >
         <Text color="$blackAlpha500" fontSize="12px" fontWeight="500">
-          © {new Date().getFullYear()} Hyperweb
+          © {new Date().getFullYear()} ny4rl4th0t3p
         </Text>
         {isMobile ? <TextDivider /> : <SocialLinks />}
         <Link href="/disclaimer">
           <Text color="$blackAlpha500" fontSize="12px" fontWeight="500">
-            Terms of Service
+            Disclaimer
           </Text>
         </Link>
       </Box>
@@ -53,23 +52,7 @@ const TextDivider = () => {
 const socialLinks = [
   {
     icon: <Icon name="github" color="$blackAlpha600" />,
-    href: 'https://github.com/hyperweb-io',
-  },
-  {
-    icon: <Icon name="discord" color="$blackAlpha600" />,
-    href: 'https://discord.com/invite/xh3ZwHj2qQ',
-  },
-  {
-    icon: (
-      <Box color="$blackAlpha600">
-        <FaXTwitter size="16px" />
-      </Box>
-    ),
-    href: 'https://x.com/Hyperweb_',
-  },
-  {
-    icon: <Icon name="youtube" color="$blackAlpha600" />,
-    href: 'https://www.youtube.com/channel/UCA9jzRlnUJRxec8S5Lt7Vcw',
+    href: 'https://github.com/ny4rl4th0t3p/seedward-suite',
   },
 ];
 
