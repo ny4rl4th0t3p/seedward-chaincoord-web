@@ -155,7 +155,8 @@ async function waitForServer(port: number, timeoutMs = 10_000): Promise<void> {
 }
 
 async function seedCoordinatorAllowlist(coordAddr: string): Promise<void> {
-  const base = `http://localhost:${COORDD_PORT}`;
+  // coordd's REST API is mounted under /api/v1 (ADR-0027); /healthz above stays at the root.
+  const base = `http://localhost:${COORDD_PORT}/api/v1`;
 
   // 1. Get challenge.
   const challengeRes = await fetch(`${base}/auth/challenge`, {

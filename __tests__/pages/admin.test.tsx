@@ -156,3 +156,64 @@ describe('AdminPage', () => {
     );
   });
 });
+
+const LOG_LEVEL = '/admin/log-level';
+
+describe('AdminPage — log level', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  // The current level's button is the disabled/primary one — asserting it is disabled proves the
+  // GET response was read and applied.
+  it('reads and highlights the current log level', async () => {
+    mockAuth.mockReturnValue({ isAuthenticated: true });
+    mockFetch([
+      { method: 'GET', match: COORD, body: { items: [], total: 0 } },
+      { method: 'GET', match: LOG_LEVEL, body: { level: 'info' } },
+    ]);
+    renderWithClient(<AdminPage />);
+
+    await waitFor(() => expect(screen.getByText('Log Level')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'info' })).toBeDisabled());
+    // A non-current level stays clickable.
+    expect(screen.getByRole('button', { name: 'debug' })).not.toBeDisabled();
+  });
+
+  it('POSTs the chosen level and confirms', async () => {
+    mockAuth.mockReturnValue({ isAuthenticated: true });
+    mockFetch([
+      { method: 'GET', match: COORD, body: { items: [], total: 0 } },
+      { method: 'GET', match: LOG_LEVEL, body: { level: 'info' } },
+      { method: 'POST', match: LOG_LEVEL, body: { level: 'debug' } },
+    ]);
+    renderWithClient(<AdminPage />);
+
+    await waitFor(() => screen.getByRole('button', { name: 'debug' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'debug' }));
+    });
+
+    const call = (global as unknown as { fetch: jest.Mock }).fetch.mock.calls.find(
+      ([url, init]: [string, RequestInit]) => url.includes(LOG_LEVEL) && init?.method === 'POST',
+    );
+    expect(call).toBeDefined();
+    expect(JSON.parse(call![1].body as string)).toEqual({ level: 'debug' });
+    await waitFor(() => expect(screen.getByText(/Log level set to debug/)).toBeInTheDocument());
+  });
+
+  it('surfaces a rejected level change', async () => {
+    mockAuth.mockReturnValue({ isAuthenticated: true });
+    mockFetch([
+      { method: 'GET', match: COORD, body: { items: [], total: 0 } },
+      { method: 'GET', match: LOG_LEVEL, body: { level: 'info' } },
+      { method: 'POST', match: LOG_LEVEL, status: 400, body: envelope('invalid log level') },
+    ]);
+    renderWithClient(<AdminPage />);
+
+    await waitFor(() => screen.getByRole('button', { name: 'error' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'error' }));
+    });
+
+    await waitFor(() => expect(screen.getByText('invalid log level')).toBeInTheDocument());
+  });
+});

@@ -48,20 +48,20 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getGetCommitteeLaunchIdUrl = (launchId: string,) => {
+export const getGetLaunchIdCommitteeUrl = (id: string,) => {
 
 
 
 
-  return `/committee/${launchId}`
+  return `/launch/${id}/committee`
 }
 
 /**
  * @summary Get committee
  */
-export const getCommitteeLaunchId = async (launchId: string, options?: RequestInit): Promise<ApiCommitteeJSON> => {
+export const getLaunchIdCommittee = async (id: string, options?: RequestInit): Promise<ApiCommitteeJSON> => {
 
-  return authFetchMutator<ApiCommitteeJSON>(getGetCommitteeLaunchIdUrl(launchId),
+  return authFetchMutator<ApiCommitteeJSON>(getGetLaunchIdCommitteeUrl(id),
   {
     ...options,
     method: 'GET'
@@ -74,45 +74,45 @@ export const getCommitteeLaunchId = async (launchId: string, options?: RequestIn
 
 
 
-export const getGetCommitteeLaunchIdQueryKey = (launchId: string,) => {
+export const getGetLaunchIdCommitteeQueryKey = (id: string,) => {
     return [
-    `/committee/${launchId}`
+    `/launch/${id}/committee`
     ] as const;
     }
 
 
-export const getGetCommitteeLaunchIdQueryOptions = <TData = Awaited<ReturnType<typeof getCommitteeLaunchId>>, TError = ApiErrorEnvelope>(launchId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommitteeLaunchId>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+export const getGetLaunchIdCommitteeQueryOptions = <TData = Awaited<ReturnType<typeof getLaunchIdCommittee>>, TError = ApiErrorEnvelope>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdCommittee>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetCommitteeLaunchIdQueryKey(launchId);
+  const queryKey =  queryOptions?.queryKey ?? getGetLaunchIdCommitteeQueryKey(id);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommitteeLaunchId>>> = ({ signal }) => getCommitteeLaunchId(launchId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLaunchIdCommittee>>> = ({ signal }) => getLaunchIdCommittee(id, { signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: launchId !== null && launchId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCommitteeLaunchId>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdCommittee>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type GetCommitteeLaunchIdQueryResult = NonNullable<Awaited<ReturnType<typeof getCommitteeLaunchId>>>
-export type GetCommitteeLaunchIdQueryError = ApiErrorEnvelope
+export type GetLaunchIdCommitteeQueryResult = NonNullable<Awaited<ReturnType<typeof getLaunchIdCommittee>>>
+export type GetLaunchIdCommitteeQueryError = ApiErrorEnvelope
 
 
 /**
  * @summary Get committee
  */
 
-export function useGetCommitteeLaunchId<TData = Awaited<ReturnType<typeof getCommitteeLaunchId>>, TError = ApiErrorEnvelope>(
- launchId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommitteeLaunchId>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+export function useGetLaunchIdCommittee<TData = Awaited<ReturnType<typeof getLaunchIdCommittee>>, TError = ApiErrorEnvelope>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdCommittee>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetCommitteeLaunchIdQueryOptions(launchId,options)
+  const queryOptions = getGetLaunchIdCommitteeQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

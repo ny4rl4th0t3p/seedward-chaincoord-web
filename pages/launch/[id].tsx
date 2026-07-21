@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
 import { sameAccount } from '@/utils/address';
 import { useGetLaunchId } from '@/api/generated/launches/launches';
-import { useGetCommitteeLaunchId } from '@/api/generated/committee/committee';
+import { useGetLaunchIdCommittee } from '@/api/generated/committee/committee';
 import { useGetLaunchIdDashboard } from '@/api/generated/readiness/readiness';
 import { useGetLaunchIdRehearsal } from '@/api/generated/rehearsal/rehearsal';
 
@@ -167,7 +167,7 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
   // mutation invalidates these query keys and every consumer refetches (no onUpdated callbacks needed).
   const { data: launch, isLoading: launchLoading, error: launchError } = useGetLaunchId(launchId);
   const { data: committee, isLoading: committeeLoading, error: committeeError } =
-    useGetCommitteeLaunchId(launchId);
+    useGetLaunchIdCommittee(launchId);
   const { data: dashboard } = useGetLaunchIdDashboard(launchId);
 
   const isLoading = launchLoading || committeeLoading;

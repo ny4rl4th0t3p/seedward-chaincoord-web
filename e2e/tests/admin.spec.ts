@@ -69,9 +69,40 @@ test('K.7.5 session revocation input accepts an address and calls DELETE', async
   await revokeInput.fill(coordinator().address('cosmos'));
   await page.getByRole('button', { name: /revoke sessions/i }).click();
 
-  // Success: no error shown (204 response).
-  await expect(page.getByText(/error/i)).not.toBeVisible({ timeout: 5_000 });
+  // Success: the confirmation message appears (204 response). Assert the positive outcome rather
+  // than "no /error/i visible" — the Log Level section renders an "error" button that would match.
+  await expect(page.getByText(/sessions revoked for/i)).toBeVisible({ timeout: 5_000 });
 
   // Revocation invalidates the cached JWT — subsequent tests need a fresh one.
   await invalidateJwt(coordinator(), 'cosmos');
+});
+
+test('K.7.6 log level → change persists on the running server', async ({ page }) => {
+  await loginAs(page, coordinator(), { navigateTo: '/admin' });
+  await expect(page.getByText(/log level/i)).toBeVisible({ timeout: 10_000 });
+
+  // Wait for the GET to populate "Current: <level>" (it renders "…" until then — don't assume the
+  // start level or race the fetch), then pick a different target to switch to.
+  const currentLabel = page.getByText(/Current:\s*(trace|debug|info|warn|error)\b/);
+  await expect(currentLabel).toBeVisible({ timeout: 15_000 });
+  const current = (await currentLabel.textContent())!.match(/(trace|debug|info|warn|error)/)![1];
+  const target = current === 'debug' ? 'info' : 'debug';
+
+  const targetButton = page.getByRole('button', { name: target, exact: true });
+  await expect(targetButton).toBeEnabled();
+  await Promise.all([
+    page.waitForResponse((r) => r.url().includes('/admin/log-level') && r.request().method() === 'POST'),
+    targetButton.click(),
+  ]);
+  await expect(page.getByText(new RegExp(`log level set to ${target}`, 'i'))).toBeVisible({ timeout: 5_000 });
+
+  // The change is in-memory server state: a fresh page read must report the new level. Assert on the
+  // GET body directly (registered before the reload) rather than polling the button's disabled state,
+  // so a slow refetch on the cold server can't race the assertion.
+  const reloadedGet = page.waitForResponse(
+    (r) => r.url().includes('/admin/log-level') && r.request().method() === 'GET' && r.ok(),
+    { timeout: 30_000 },
+  );
+  await page.reload();
+  expect((await (await reloadedGet).json()).level).toBe(target);
 });

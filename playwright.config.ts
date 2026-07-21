@@ -31,11 +31,10 @@ export default defineConfig({
     env: {
       // Point Next.js rewrites at the test coordd instance (started in globalSetup).
       COORD_BACKEND_URL: 'http://localhost:8181',
-      // Expose the backend URL to client-side code so React components make
+      // Expose the backend's API base to client-side code so React components make
       // direct cross-origin requests rather than going through Next.js rewrites.
-      // This avoids the rewrite matching the /launch/[id] dynamic page route for
-      // API sub-path calls (e.g. /launch/{id}/audit).
-      NEXT_PUBLIC_API_URL: 'http://localhost:8181',
+      // coordd mounts its REST surface under /api/v1 (ADR-0027), so the base includes it.
+      NEXT_PUBLIC_API_URL: 'http://localhost:8181/api/v1',
     },
   },
 });

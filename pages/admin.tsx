@@ -8,6 +8,8 @@ import {
   usePostAdminCoordinators,
   useDeleteAdminCoordinatorsAddress,
   useDeleteAdminSessionsAddress,
+  useGetAdminLogLevel,
+  usePostAdminLogLevel,
 } from '@/api/generated/admin/admin';
 import type { ApiErrorEnvelope } from '@/api/generated/model';
 
@@ -64,8 +66,82 @@ export default function AdminPage() {
         Admin Panel
       </Text>
       <CoordinatorAllowlistSection />
+      <LogLevelSection />
       <SessionRevocationSection />
     </Box>
+  );
+}
+
+// ── Log Level ─────────────────────────────────────────────────────────────────
+
+// The operationally meaningful set coordd accepts at runtime (settableLogLevels); fatal/panic/
+// disabled are intentionally not settable via the API.
+const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error'] as const;
+
+function LogLevelSection() {
+  const { data, isLoading, error: readError, refetch } = useGetAdminLogLevel();
+  const setLogLevel = usePostAdminLogLevel();
+  const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
+
+  const current = data?.level ?? '';
+
+  async function handleSet(level: string) {
+    if (!level || level === current) return;
+    setMessage(null);
+    try {
+      const res = await setLogLevel.mutateAsync({ data: { level } });
+      refetch();
+      setMessage({ text: `Log level set to ${res.level ?? level}.`, isError: false });
+    } catch (err) {
+      const env = err as ApiErrorEnvelope;
+      setMessage({
+        text: env.error?.message ?? (err instanceof Error ? err.message : String(err)),
+        isError: true,
+      });
+    }
+  }
+
+  return (
+    <AdminCard title="Log Level">
+      <Text fontSize="$xs" color="$textSecondary" attributes={{ mb: '12px' }}>
+        Change the running server&apos;s log verbosity — takes effect immediately, no restart. The change is
+        in-memory and <Text as="span" fontWeight="$semibold" fontSize="$xs">reverts to the configured
+        level on restart</Text>.
+      </Text>
+      {readError && (
+        <Text fontSize="$xs" color="$textDanger" attributes={{ mb: '8px' }}>
+          {readError.error?.message ?? 'Failed to load the current log level'}
+        </Text>
+      )}
+      <Box display="flex" gap="8px" alignItems="center" flexWrap="wrap">
+        <Text fontSize="$sm" color="$textSecondary">
+          Current:{' '}
+          <Text as="span" fontSize="$sm" fontFamily="monospace" fontWeight="$semibold">
+            {isLoading ? '…' : current || '—'}
+          </Text>
+        </Text>
+        {LOG_LEVELS.map((level) => (
+          <Button
+            key={level}
+            variant={level === current ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => handleSet(level)}
+            disabled={setLogLevel.isLoading || level === current}
+          >
+            {level}
+          </Button>
+        ))}
+      </Box>
+      {message && (
+        <Text
+          fontSize="$xs"
+          color={message.isError ? '$textDanger' : '$textSuccess'}
+          attributes={{ mt: '8px' }}
+        >
+          {message.text}
+        </Text>
+      )}
+    </AdminCard>
   );
 }
 

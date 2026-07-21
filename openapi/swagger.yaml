@@ -1,4 +1,4 @@
-basePath: /
+basePath: /api/v1
 definitions:
   api.addCoordinatorRequest:
     properties:
@@ -309,6 +309,11 @@ definitions:
       status:
         type: string
       updated_at:
+        type: string
+    type: object
+  api.logLevelJSON:
+    properties:
+      level:
         type: string
     type: object
   api.memberJSON:
@@ -1010,6 +1015,65 @@ paths:
       summary: Remove coordinator from allowlist
       tags:
       - admin
+  /admin/log-level:
+    get:
+      description: Returns the current process log level. Admin only.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.logLevelJSON'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get the log level
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: Changes the process log level live (trace|debug|info|warn|error).
+        In-memory; resets on restart. Admin only.
+      parameters:
+      - description: Desired level
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.logLevelJSON'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.logLevelJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Set the log level
+      tags:
+      - admin
   /admin/sessions/{address}:
     delete:
       parameters:
@@ -1332,52 +1396,6 @@ paths:
       summary: Rehearsal result write-back (bridge)
       tags:
       - bridge
-  /committee/{launch_id}:
-    get:
-      parameters:
-      - description: Launch UUID
-        in: path
-        name: launch_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.committeeJSON'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.errorEnvelope'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.errorEnvelope'
-      summary: Get committee
-      tags:
-      - committee
-  /healthz:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "503":
-          description: Service Unavailable
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Health check
-      tags:
-      - health
   /launch:
     post:
       consumes:
@@ -1709,6 +1727,31 @@ paths:
       tags:
       - launches
   /launch/{id}/committee:
+    get:
+      parameters:
+      - description: Launch UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.committeeJSON'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorEnvelope'
+      summary: Get committee
+      tags:
+      - committee
     post:
       consumes:
       - application/json

@@ -68,7 +68,7 @@ test('K.1.4 Revoke All Sessions signs out and rejects old JWT', async ({ page })
 
 // Sanity check: /auth/session endpoint returns is_coordinator=true for the coordinator.
 test('K.1.6 GET /auth/session reflects is_coordinator correctly', async () => {
-  const base = `http://localhost:${COORDD_PORT}`;
+  const base = `http://localhost:${COORDD_PORT}/api/v1`;
   const coordAddr = coordinator().address('cosmos');
 
   const token = await getJwt(coordinator(), 'cosmos');

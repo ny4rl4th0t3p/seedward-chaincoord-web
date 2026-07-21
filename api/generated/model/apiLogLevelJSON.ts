@@ -7,4 +7,6 @@
  * OpenAPI spec version: 1.0
  */
 
-export type GetHealthz503 = {[key: string]: string};
+export interface ApiLogLevelJSON {
+  level?: string;
+}

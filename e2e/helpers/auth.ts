@@ -67,7 +67,8 @@ export async function loginAs(
 /** Obtains a JWT for the given keypair from the coordd backend directly.
  *  Returns a cached JWT if one is still valid; otherwise requests a fresh one. */
 export async function getJwt(keypair: TestKeypair, prefix: string): Promise<string> {
-  const base = `http://localhost:${COORDD_PORT}`;
+  // coordd's REST API is mounted under /api/v1 (ADR-0027).
+  const base = `http://localhost:${COORDD_PORT}/api/v1`;
   const address = keypair.address(prefix);
 
   const cached = _jwtCache.get(address);

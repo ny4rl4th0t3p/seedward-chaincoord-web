@@ -12,19 +12,22 @@ module.exports = {
   swcMinify: true,
   // Minimal self-contained server output for the Docker image (see Dockerfile).
   output: 'standalone',
+  // Default the client's API base to coordd's versioned mount (ADR-0027), proxied below. A bare ''
+  // base would fetch coordd paths at their own URLs, and GET /launch/<uuid> would COLLIDE with the
+  // /launch/[id] page route (pages win over fallback rewrites → the fetch gets HTML, not JSON).
+  // /api/v1 is itself collision-free — no page and no Next API route lives under it — so it needs
+  // no separate web-owned prefix. An explicit NEXT_PUBLIC_API_URL (e.g. e2e's direct coordd URL,
+  // already ending in /api/v1) still overrides.
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '/api/v1',
+  },
   async rewrites() {
-    // Use fallback so Next.js dynamic page routes (e.g. /launch/[id]) are served
-    // by the React app on direct navigation; sub-paths like /launch/:id/audit are
-    // still proxied to the backend because they have no matching page file.
+    // fallback: fires only when no page/route matches. Nothing lives under /api/v1, so every
+    // same-origin API call falls through to coordd. Generated client paths are resource-relative
+    // (/launch/{id}); the /api/v1 base is what makes them land here.
     return {
       fallback: [
-        { source: '/api/:path*',      destination: `${API_URL}/api/:path*` },
-        { source: '/auth/:path*',     destination: `${API_URL}/auth/:path*` },
-        { source: '/audit/:path*',    destination: `${API_URL}/audit/:path*` },
-        { source: '/launch/:path*',   destination: `${API_URL}/launch/:path*` },
-        { source: '/launches/:path*', destination: `${API_URL}/launches/:path*` },
-        { source: '/committee/:path*',destination: `${API_URL}/committee/:path*` },
-        { source: '/admin/:path*',    destination: `${API_URL}/admin/:path*` },
+        { source: '/api/v1/:path*', destination: `${API_URL}/api/v1/:path*` },
       ],
     };
   },

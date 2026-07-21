@@ -12,7 +12,8 @@ COPY . .
 RUN yarn sync:wasm
 # The API client (api/generated) + vendored spec (openapi/swagger.yaml) are committed,
 # so no gen:api/sync:spec is needed here. NEXT_PUBLIC_API_URL is left unset: the client
-# fetches same-origin and Next.js proxies /api,/auth,/launch,… to the backend.
+# defaults to the same-origin /api/v1 prefix (see next.config.js) and Next.js proxies
+# it to the backend — coordd's versioned mount can't collide with page routes.
 # `output: 'standalone'` freezes the next.config.js rewrite destinations at BUILD time, so bake
 # a placeholder URL here; docker-entrypoint.sh substitutes the runtime COORD_BACKEND_URL into
 # the serialized server files at container start. The placeholder never serves traffic.

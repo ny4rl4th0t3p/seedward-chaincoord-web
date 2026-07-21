@@ -24,6 +24,7 @@ import type {
   ApiAddCoordinatorRequest,
   ApiCoordinatorAllowlistEntryJSON,
   ApiErrorEnvelope,
+  ApiLogLevelJSON,
   ApiPageEnvelopeArrayApiCoordinatorAllowlistEntryJSON,
   GetAdminCoordinatorsParams
 } from '../model';
@@ -275,6 +276,154 @@ export const useDeleteAdminCoordinatorsAddress = <TError = ApiErrorEnvelope,
         TContext
       > => {
       return useMutation(getDeleteAdminCoordinatorsAddressMutationOptions(options));
+    }
+    export const getGetAdminLogLevelUrl = () => {
+
+
+
+
+  return `/admin/log-level`
+}
+
+/**
+ * Returns the current process log level. Admin only.
+ * @summary Get the log level
+ */
+export const getAdminLogLevel = async ( options?: RequestInit): Promise<ApiLogLevelJSON> => {
+
+  return authFetchMutator<ApiLogLevelJSON>(getGetAdminLogLevelUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminLogLevelQueryKey = () => {
+    return [
+    `/admin/log-level`
+    ] as const;
+    }
+
+
+export const getGetAdminLogLevelQueryOptions = <TData = Awaited<ReturnType<typeof getAdminLogLevel>>, TError = ApiErrorEnvelope>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminLogLevel>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminLogLevelQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminLogLevel>>> = ({ signal }) => getAdminLogLevel({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminLogLevel>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminLogLevelQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminLogLevel>>>
+export type GetAdminLogLevelQueryError = ApiErrorEnvelope
+
+
+/**
+ * @summary Get the log level
+ */
+
+export function useGetAdminLogLevel<TData = Awaited<ReturnType<typeof getAdminLogLevel>>, TError = ApiErrorEnvelope>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminLogLevel>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminLogLevelQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getPostAdminLogLevelUrl = () => {
+
+
+
+
+  return `/admin/log-level`
+}
+
+/**
+ * Changes the process log level live (trace|debug|info|warn|error). In-memory; resets on restart. Admin only.
+ * @summary Set the log level
+ */
+export const postAdminLogLevel = async (apiLogLevelJSON: ApiLogLevelJSON, options?: RequestInit): Promise<ApiLogLevelJSON> => {
+
+  return authFetchMutator<ApiLogLevelJSON>(getPostAdminLogLevelUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(apiLogLevelJSON)
+  }
+);}
+
+
+
+
+
+export const getPostAdminLogLevelMutationOptions = <TError = ApiErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminLogLevel>>, TError,{data: ApiLogLevelJSON}, TContext>, request?: SecondParameter<typeof authFetchMutator>}
+): UseMutationOptions<Awaited<ReturnType<typeof postAdminLogLevel>>, TError,{data: ApiLogLevelJSON}, TContext> => {
+
+const mutationKey = ['postAdminLogLevel'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postAdminLogLevel>>, {data: ApiLogLevelJSON}> = (props) => {
+          const {data} = props ?? {};
+
+          return  postAdminLogLevel(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostAdminLogLevelMutationResult = NonNullable<Awaited<ReturnType<typeof postAdminLogLevel>>>
+    export type PostAdminLogLevelMutationBody = ApiLogLevelJSON
+    export type PostAdminLogLevelMutationError = ApiErrorEnvelope
+
+    /**
+ * @summary Set the log level
+ */
+export const usePostAdminLogLevel = <TError = ApiErrorEnvelope,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postAdminLogLevel>>, TError,{data: ApiLogLevelJSON}, TContext>, request?: SecondParameter<typeof authFetchMutator>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof postAdminLogLevel>>,
+        TError,
+        {data: ApiLogLevelJSON},
+        TContext
+      > => {
+      return useMutation(getPostAdminLogLevelMutationOptions(options));
     }
     export const getDeleteAdminSessionsAddressUrl = (address: string,) => {
 

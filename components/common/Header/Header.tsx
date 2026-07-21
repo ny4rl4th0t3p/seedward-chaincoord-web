@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { Box, useColorModeValue, useTheme } from '@interchain-ui/react';
 import { RxHamburgerMenu } from 'react-icons/rx';
@@ -12,12 +13,7 @@ interface HeaderProps {
 
 export const Header = ({ onOpenSidebar }: HeaderProps) => {
   const { theme, setTheme } = useTheme();
-  const { isDesktop, isMobile } = useDetectBreakpoints();
-
-  const brandLogo = useColorModeValue(
-    '/logos/brand-logo.svg',
-    '/logos/brand-logo-dark.svg',
-  );
+  const { isDesktop } = useDetectBreakpoints();
 
   const brandLogoSm = useColorModeValue(
     '/logos/brand-logo-sm.svg',
@@ -31,11 +27,17 @@ export const Header = ({ onOpenSidebar }: HeaderProps) => {
       alignItems="center"
       mb="30px"
     >
+      {/* Below desktop the sidebar (and its full logo) is hidden — keep the brand visible with
+          the compact logo instead of falling back to plain text. */}
       {!isDesktop && (
         <Link href="/">
-          <Box as="span" fontWeight="$bold" fontSize="$lg">
-            chaincoord
-          </Box>
+          <Image
+            src={brandLogoSm}
+            alt="brand logo"
+            width="0"
+            height="0"
+            style={{ height: '38px', width: 'auto' }}
+          />
         </Link>
       )}
       <Box display="flex" alignItems="center" gap="10px">
