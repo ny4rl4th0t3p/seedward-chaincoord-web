@@ -24,7 +24,7 @@ jobs:
       # a newer coordd release.
       - name: Download coordd release binary
         env:
-          COORDD_VERSION: v1.0.0-rc4
+          COORDD_VERSION: v1.0.0
         run: |
           asset="seedward-chaincoord_${COORDD_VERSION#v}_linux_amd64.tar.gz"
           url="https://github.com/ny4rl4th0t3p/seedward-chaincoord/releases/download/${COORDD_VERSION}/${asset}"

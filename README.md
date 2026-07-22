@@ -8,7 +8,9 @@ committee governance and M-of-N proposals, validator join requests, allocation-f
 readiness — entirely over coordd's HTTP API. It is a **chaincoord front**: it talks only to coordd, which aggregates
 the rest of the suite (rehearsal results, audit log) behind that one API.
 
-> **Proof of concept — not for production use.** Research-grade software; APIs and behaviours may change without notice.
+> **Beta (v0.3.x).** Functional — it drives the full launch lifecycle against coordd v1.0.0 — but a
+> deliberately minimal UI that will keep evolving; not yet externally audited. Verify on your own setup
+> before high-value use.
 
 ## Stack
 
@@ -72,7 +74,7 @@ blocks submit — the server re-validates authoritatively.
 - `yarn playwright` — end-to-end tests against a **real coordd**: Playwright's global setup runs one either
   from a sibling binary (`COORDD_BIN`, default `../seedward-chaincoord/bin/coordd`) or, with `COORDD_IMAGE`
   set, from a published GHCR image via `docker run` (no Go toolchain —
-  `COORDD_IMAGE=ghcr.io/ny4rl4th0t3p/seedward-chaincoord:1.0.0-rc2`).
+  `COORDD_IMAGE=ghcr.io/ny4rl4th0t3p/seedward-chaincoord:v1.0.0`).
 
 ## Design decisions
 
