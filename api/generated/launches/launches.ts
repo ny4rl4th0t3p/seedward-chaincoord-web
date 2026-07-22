@@ -433,7 +433,9 @@ export const getPostLaunchIdOpenWindowUrl = (id: string,) => {
 }
 
 /**
- * Transitions a launch from DRAFT to OPEN. Committee member only.
+ * Transitions a launch to WINDOW_OPEN (opens the application window): from PUBLISHED,
+ * or from DRAFT with the initial genesis already uploaded (auto-publishes first).
+ * Committee member only.
  * @summary Open the application window
  */
 export const postLaunchIdOpenWindow = async (id: string, options?: RequestInit): Promise<ApiLaunchJSON> => {
