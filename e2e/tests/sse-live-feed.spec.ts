@@ -1,21 +1,17 @@
 import { test, expect } from '../fixtures/test';
 import { createLaunch } from '../helpers/launch';
 
-// K.12 — SSE live event feed (authenticated fetch stream)
+// K.12 — SSE live event feed
 //
-// The "Live Events" panel is fed ONLY by useLaunchEventStream (the authenticated SSE push) with no
-// react-query/polling backstop — so the placeholder clearing is proof that the stream connected WITH
-// the Bearer token and received a server-pushed event, not a refetch. Before the fetch-based SSE fix,
-// the native EventSource hit coordd's visibility-gated /events anonymously (EventSource can't set an
-// Authorization header) → 404 → the feed stayed silently empty. This guards that regression end-to-end
-// against a real coordd.
-//
-// Trigger = a direct cancel of the fresh DRAFT launch: coordd's CancelLaunch publishes LaunchCancelled
-// to the SSE broker (s.events.Publish). Note many *direct* actions (OpenWindow, uploads, patches) only
-// write the audit log and do NOT publish to SSE — only proposal executions, cancel, and rehearsal
-// events reach the live feed — so cancel is the simplest single action that produces a push.
+// SKIPPED: the "Live Events" panel was removed from the launch detail page. The audit log is now the
+// single activity view (it auto-refetches on every governance mutation), and the SSE feed never streamed
+// through the same-origin Next rewrite proxy the container deployment uses. coordd's GET
+// /launch/{id}/events endpoint and the useLaunchEventStream hook are kept and unit-tested for the future
+// "unify audit ⟺ SSE" work — at which point the stream should DRIVE an audit refetch rather than feed a
+// separate panel. This test targeted the removed panel; re-enable and rewrite it against the audit log
+// (not a "Listening for events…" placeholder) once that rewrite lands.
 
-test('K.12.1 the live feed receives a pushed event', async ({ page }) => {
+test.skip('K.12.1 the live feed receives a pushed event', async ({ page }) => {
   await createLaunch(page, { chainName: 'k121chain', chainId: 'k121-1' });
 
   // SSE-exclusive panel: empty ("Listening for events…") until a real push arrives.

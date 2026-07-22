@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'child_process';
-import { writeFileSync, readFileSync, unlinkSync, existsSync, rmSync } from 'fs';
+import { writeFileSync, readFileSync, unlinkSync, existsSync, rmSync, openSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
@@ -9,6 +9,7 @@ export const COORDD_PORT = 8181;
 export const DB_PATH = join(tmpdir(), 'playwright-coordd.db');
 export const AUDIT_LOG_PATH = join(tmpdir(), 'playwright-audit.jsonl');
 export const PID_FILE = join(tmpdir(), 'playwright-coordd.pid');
+export const COORDD_LOG_PATH = join(tmpdir(), 'playwright-coordd.log');
 
 // Deterministic test Ed25519 seeds (base64-encoded 32 bytes). Never use in production.
 const JWT_KEY_B64 = Buffer.alloc(32, 0x03).toString('base64');
@@ -84,18 +85,22 @@ async function startCoorddBinary(coordAddr: string): Promise<void> {
   const migrate = spawnSync(COORDD_BIN, ['migrate'], { env, stdio: 'inherit' });
   if (migrate.status !== 0) throw new Error('coordd migrate failed');
 
-  // Start the server.
-  const proc = spawn(COORDD_BIN, ['serve'], { env, stdio: 'pipe', detached: false });
-  let startupError = '';
-  proc.stderr?.on('data', (d: Buffer) => { startupError += d.toString(); });
+  // Start the server. Redirect coordd's stdout+stderr to a log file rather than piping into this
+  // process: an undrained 'pipe' stdout fills the ~64KB OS pipe buffer partway through a run and
+  // blocks coordd's next write — a hard hang that then cascades into every later test as a timeout.
+  // Writing to a file both drains the streams and leaves a readable log for diagnosis (container mode
+  // already drains via `docker logs`).
+  const logFd = openSync(COORDD_LOG_PATH, 'w');
+  const proc = spawn(COORDD_BIN, ['serve'], { env, stdio: ['ignore', logFd, logFd], detached: false });
   proc.on('error', (err) => { throw new Error(`coordd failed to start: ${err.message}`); });
   if (proc.pid) writeFileSync(PID_FILE, String(proc.pid));
 
   // Give coordd a moment to bind the port before polling readiness.
   await new Promise(r => setTimeout(r, 300));
   if (proc.exitCode !== null) {
+    const log = existsSync(COORDD_LOG_PATH) ? readFileSync(COORDD_LOG_PATH, 'utf8') : '';
     throw new Error(
-      `coordd exited early (code ${proc.exitCode}) — port ${COORDD_PORT} may still be in use.\n${startupError}`,
+      `coordd exited early (code ${proc.exitCode}) — port ${COORDD_PORT} may still be in use.\n${log}`,
     );
   }
 }

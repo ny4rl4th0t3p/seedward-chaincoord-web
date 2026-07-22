@@ -56,13 +56,23 @@ test('K.4.1val submit join request shows pending status', async ({ browser }) =>
 // ── K.4.2 Advisory (client-side WASM) gentx validation ────────────────────────
 
 test('K.4.2val advisory WASM validation flags a bad gentx before submit', async ({ browser }) => {
-  // Coordinator creates a launch with the validator as a member so it can read the launch + see the form.
+  // Coordinator creates a launch (validator as a member so it can read the launch) and opens the
+  // application window — the join form, which hosts the advisory validator, only renders in
+  // WINDOW_OPEN; outside it the panel shows a "window is not open" notice instead.
   const coordCtx = await browser.newContext();
   const coordPage = await coordCtx.newPage();
   const launchId = await createLaunch(coordPage, {
     chainName: 'k4adv', chainId: 'k4adv-1', bech32Prefix: 'k4a',
     members: [validator().address('k4a')],
   });
+
+  // Upload initial genesis ref (required before OpenWindow — server auto-publishes from DRAFT+SHA).
+  await coordPage.getByPlaceholder('https://files.example.com/genesis.json').fill('https://example.com/genesis.json');
+  await coordPage.getByPlaceholder('64-character hex digest').fill('a'.repeat(64));
+  await coordPage.getByRole('button', { name: /submit genesis reference/i }).click();
+  await expect(coordPage.getByText(/genesis reference saved/i)).toBeVisible({ timeout: 10_000 });
+  await coordPage.getByRole('button', { name: /open application window/i }).click();
+  await expect(coordPage.getByText(/WINDOW_OPEN/i).or(coordPage.getByText(/\bopen\b/i)).first()).toBeVisible({ timeout: 10_000 });
 
   const valCtx = await browser.newContext();
   const valPage = await valCtx.newPage();
