@@ -7,6 +7,7 @@ import AdminPage from '@/pages/admin';
 jest.mock('@interchain-ui/react', () => ({
   Box: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
+  useColorModeValue: (light: unknown) => light,
 }));
 
 jest.mock('@/components', () => ({

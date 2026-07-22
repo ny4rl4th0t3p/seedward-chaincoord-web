@@ -61,6 +61,9 @@ export const getPostLaunchIdProposalUrl = (id: string,) => {
 
 /**
  * Committee member raises a new action proposal. Rate-limited to 60 req/IP/min.
+ * 409 if a conflicting proposal is already pending for the launch: an identical one
+ * (same action + payload), or a contradictory validator decision (approve/reject/remove
+ * targeting the same join request).
  * @summary Raise a proposal
  */
 export const postLaunchIdProposal = async (id: string,

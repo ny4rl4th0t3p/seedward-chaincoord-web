@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { Box, Text } from '@interchain-ui/react';
 import { Button } from '@/components';
 import { useAuth } from '@/contexts';
+// Import directly (not via the '@/hooks' barrel): the barrel re-exports './common', which pulls the
+// wallet/config chain (@interchain-kit → walletconnect → an ESM module jest can't transform).
+import { useInputColor } from '@/hooks/useInputColor';
 import { accountToBech32, bech32Prefix } from '@/utils/address';
 import {
   useGetAdminCoordinators,
@@ -161,6 +164,7 @@ function CoordinatorAllowlistSection() {
 
   const addCoordinator = usePostAdminCoordinators();
   const removeCoordinator = useDeleteAdminCoordinatorsAddress();
+  const inputColor = useInputColor();
 
   const [newAddress, setNewAddress] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
@@ -217,7 +221,7 @@ function CoordinatorAllowlistSection() {
           onChange={(e) => setNewAddress(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
           placeholder="cosmos1… address to add"
-          style={inputStyle}
+          style={{ ...inputStyle, color: inputColor }}
         />
         <Button
           variant="primary"
@@ -281,6 +285,7 @@ function CoordinatorAllowlistSection() {
 
 function SessionRevocationSection() {
   const revokeSessions = useDeleteAdminSessionsAddress();
+  const inputColor = useInputColor();
   const [targetAddress, setTargetAddress] = useState('');
   const [message, setMessage] = useState<{ text: string; isError: boolean } | null>(null);
 
@@ -312,7 +317,7 @@ function SessionRevocationSection() {
           onChange={(e) => setTargetAddress(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleRevoke(); }}
           placeholder="cosmos1… address to revoke"
-          style={inputStyle}
+          style={{ ...inputStyle, color: inputColor }}
         />
         <Button
           variant="outline"

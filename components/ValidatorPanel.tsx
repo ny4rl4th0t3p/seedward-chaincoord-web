@@ -15,6 +15,9 @@ import {
 } from '@/api/generated/readiness/readiness';
 import { authedFetch } from '@/api/authedFetch';
 import { computeSha256Hex } from '@/utils/sha256';
+// Direct import, not the '@/hooks' barrel: the barrel re-exports './common', which pulls the
+// wallet/config chain (@interchain-kit → walletconnect → an ESM module jest can't transform).
+import { useInputColor } from '@/hooks/useInputColor';
 import { sameAccount } from '@/utils/address';
 import type {
   ServicesSubmitInput,
@@ -63,6 +66,7 @@ function TextInput({
   placeholder?: string;
   disabled?: boolean;
 }) {
+  const inputColor = useInputColor();
   return (
     <input
       value={value}
@@ -75,7 +79,7 @@ function TextInput({
         borderRadius: '6px',
         border: '1px solid var(--chakra-colors-divider, #e2e8f0)',
         background: 'transparent',
-        color: 'inherit',
+        color: inputColor,
         fontSize: '14px',
         fontFamily: 'inherit',
         boxSizing: 'border-box',
@@ -97,6 +101,7 @@ function TextArea({
   disabled?: boolean;
   rows?: number;
 }) {
+  const inputColor = useInputColor();
   return (
     <textarea
       value={value}
@@ -110,7 +115,7 @@ function TextArea({
         borderRadius: '6px',
         border: '1px solid var(--chakra-colors-divider, #e2e8f0)',
         background: 'transparent',
-        color: 'inherit',
+        color: inputColor,
         fontSize: '13px',
         fontFamily: 'monospace',
         resize: 'vertical',

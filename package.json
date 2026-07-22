@@ -27,6 +27,7 @@
   "dependencies": {
     "@chain-registry/assets": "1.63.5",
     "@chain-registry/v2": "^1.71.229",
+    "@cosmjs/crypto": "^0.31.1",
     "@cosmjs/encoding": "0.31.1",
     "@cosmjs/stargate": "0.31.1",
     "@interchain-kit/core": "^0.3.40",

@@ -239,6 +239,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('coord:unauthorized', handleUnauthorized);
   }, [logout]);
 
+  // A session revoked/expired server-side isn't self-announcing: read-only pages hit optionalAuth
+  // endpoints (e.g. GET /launches) that degrade to *anonymous* — an empty private list, not a 401 —
+  // so nothing bounces the user to sign-in on its own. Actively validate the stored token against
+  // GET /auth/session (which DOES 401 on an invalid token) on mount and whenever the tab regains
+  // focus, and log out on failure so the AuthWall takes over. Read the token from sessionStorage
+  // (the source of truth) rather than React state, which lags a render behind on restore.
+  useEffect(() => {
+    const validate = () => {
+      const t = typeof window !== 'undefined' ? sessionStorage.getItem('coord_auth_token') : null;
+      if (!t) return;
+      fetch(`${API_BASE}/auth/session`, { headers: { Authorization: `Bearer ${t}` } })
+        .then((r) => {
+          if (r.status === 401) void logout();
+        })
+        .catch(() => {});
+    };
+    validate();
+    window.addEventListener('focus', validate);
+    return () => window.removeEventListener('focus', validate);
+  }, [logout]);
+
   const value: AuthContextValue = {
     token,
     operatorAddress,
