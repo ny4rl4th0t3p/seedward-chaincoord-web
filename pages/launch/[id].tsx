@@ -7,7 +7,7 @@ import { ValidatorPanel } from '@/components/ValidatorPanel';
 import { CommitteePanel } from '@/components/CommitteePanel';
 import { RehearsalResetButton } from '@/components/RehearsalResetButton';
 import { AuditLogSection } from '@/components/AuditLogSection';
-import { useAddChainToWallet, useLaunchEventStream } from '@/hooks';
+import { useAddChainToWallet } from '@/hooks';
 import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
 import { sameAccount } from '@/utils/address';
@@ -157,11 +157,10 @@ function ValidatorConnectAndAuth({ launchId, hint }: { launchId: string; hint: C
 // ── Authenticated detail view ──────────────────────────────────────────────────
 
 function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
-  const { operatorAddress, chainName, logout, revokeAllSessions, token } = useAuth();
+  const { operatorAddress, chainName, logout, revokeAllSessions } = useAuth();
   const [revokeConfirm, setRevokeConfirm] = useState(false);
   const { wallet, chain } = useChain(chainName!);
   const signingChainId = chain.chainId as string;
-  const sseEvents = useLaunchEventStream(launchId, token);
 
   // Launch / committee / dashboard via react-query — cached + deduped across the panels; a panel's
   // mutation invalidates these query keys and every consumer refetches (no onUpdated callbacks needed).
@@ -322,24 +321,21 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
       />
 
       {/* ── Audit log ── */}
-      <AuditLogSection launchId={launchId} />
+      {/*
+        The audit log is the single, authoritative activity view. There is intentionally NO separate
+        "Live Events" (SSE) card: the SSE feed only ever carried a strict SUBSET of the audit log
+        (proposal executions/cancel/rehearsal-publish — direct actions like open-window/uploads/patches
+        are audited but never broadcast), rendered less legibly, and it does not stream through the
+        same-origin Next rewrite proxy the container deployment uses. The audit panel auto-refetches on
+        every governance mutation, so it already reflects your own actions live.
 
-      {/* ── Live event feed ── */}
-      <InfoCard title="Live Events">
-        {sseEvents.length === 0 ? (
-          <Text fontSize="$xs" color="$textSecondary">
-            Listening for events…
-          </Text>
-        ) : (
-          <Box display="flex" flexDirection="column" gap="4px">
-            {sseEvents.map((ev, i) => (
-              <Text key={i} fontSize="$xs" color="$textSecondary" fontFamily="monospace">
-                {ev}
-              </Text>
-            ))}
-          </Box>
-        )}
-      </InfoCard>
+        The SSE plumbing (useLaunchEventStream hook + coordd's GET /launch/{id}/events endpoint) is kept
+        deliberately, tested and ready, for the future "unify audit ⟺ SSE" work: once coordd broadcasts
+        every audited event (plan-chaincoord-sse-hardening) and the stream reaches the browser, the hook
+        should DRIVE a refetch/invalidation of the audit query — giving real-time visibility of *other
+        participants'* actions from the one source of truth, rather than a second, lossy feed.
+      */}
+      <AuditLogSection launchId={launchId} />
     </Box>
   );
 }

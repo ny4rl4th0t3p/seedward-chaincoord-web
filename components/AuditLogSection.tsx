@@ -4,32 +4,30 @@ import { Button } from '@/components';
 import { useGetLaunchIdAudit, useGetAuditPubkey } from '@/api/generated/audit/audit';
 
 /**
- * On-demand audit-log viewer for a launch (GET /launch/{id}/audit). The server audit pubkey
- * (GET /audit/pubkey) is fetched alongside as best-effort — a failure only hides the pubkey row
- * and never blocks the entries. Both queries carry auth via the shared mutator.
+ * Live audit-log viewer for a launch (GET /launch/{id}/audit). Fetches eagerly and stays current:
+ * the query is active, so the app-wide invalidateQueries() every governance mutation fires refetches
+ * it — a co-sign/execution shows up without a manual reload. The server audit pubkey
+ * (GET /audit/pubkey) is fetched alongside as best-effort — a failure only hides the pubkey row and
+ * never blocks the entries. Both queries carry auth via the shared mutator.
  */
 export function AuditLogSection({ launchId }: { launchId: string }) {
-  const [loadRequested, setLoadRequested] = useState(false);
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
-  const { data, isLoading, error } = useGetLaunchIdAudit(launchId, {
-    query: { enabled: loadRequested },
-  });
+  const { data, isLoading, error, refetch, isFetching } = useGetLaunchIdAudit(launchId);
   const entries = data?.entries ?? null;
 
-  const { data: pubkeyData } = useGetAuditPubkey({
-    query: { enabled: loadRequested },
-  });
+  const { data: pubkeyData } = useGetAuditPubkey();
   const pubkey = pubkeyData?.public_key ?? null;
 
   return (
     <Box borderRadius="8px" border="1px solid" borderColor="$divider" p="20px">
-      <Text fontSize="$md" fontWeight="$semibold" attributes={{ mb: '12px' }}>Audit Log</Text>
-      {!loadRequested ? (
-        <Button variant="outline" size="sm" onClick={() => setLoadRequested(true)}>
-          Load Audit Log
+      <Box display="flex" justifyContent="space-between" alignItems="center" attributes={{ mb: '12px' }}>
+        <Text fontSize="$md" fontWeight="$semibold">Audit Log</Text>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? 'Refreshing…' : 'Refresh'}
         </Button>
-      ) : isLoading ? (
+      </Box>
+      {isLoading ? (
         <Text fontSize="$xs" color="$textSecondary">Loading…</Text>
       ) : error ? (
         <Text fontSize="$xs" color="$textDanger">
@@ -66,12 +64,15 @@ export function AuditLogSection({ launchId }: { launchId: string }) {
                   <Text fontSize="$xs" color="$textSecondary">{expandedIdx === i ? '▲' : '▼'}</Text>
                 </Box>
                 {expandedIdx === i && (
+                  // Theme-aware surface + explicit text color: the previous hardcoded light bg with no
+                  // text color rendered dark-on-dark (invisible) in the night theme.
                   <Box
                     borderRadius="4px"
                     p="8px"
-                    attributes={{ style: { background: 'var(--chakra-colors-gray-50, #f7f7f7)', overflowX: 'auto' } }}
+                    backgroundColor="$divider"
+                    attributes={{ style: { overflowX: 'auto' } }}
                   >
-                    <Text fontSize="$xs" fontFamily="monospace">
+                    <Text fontSize="$xs" fontFamily="monospace" color="$text">
                       {JSON.stringify(e.payload, null, 2)}
                     </Text>
                   </Box>

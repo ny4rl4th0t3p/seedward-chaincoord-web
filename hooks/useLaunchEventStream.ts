@@ -3,6 +3,15 @@ import { useEffect, useState } from 'react';
 /**
  * Streams a launch's server-sent event feed over an authenticated fetch.
  *
+ * NOTE: intentionally NOT wired into any page right now. The old launch-detail "Live Events" card was
+ * removed — it only ever showed a strict subset of the audit log (proposal executions/cancel/
+ * rehearsal-publish; direct actions are audited but not broadcast) and did not stream through the
+ * container's same-origin Next rewrite proxy. This hook (and coordd's GET /launch/{id}/events) is kept,
+ * tested and ready, for the future "unify audit ⟺ SSE" work: once every audited event is broadcast
+ * (plan-chaincoord-sse-hardening) and the stream reaches the browser, this should DRIVE a refetch of the
+ * audit query — real-time visibility of other participants' actions from the one source of truth, rather
+ * than a second, lossy feed. See the comment above <AuditLogSection/> in pages/launch/[id].tsx.
+ *
  * Native `EventSource` can't set an `Authorization` header, but coordd's `/events` is
  * visibility-gated behind the Bearer token — so we stream over `fetch` (header-capable)
  * and reconnect with capped exponential backoff on transient drops. coordd emits no

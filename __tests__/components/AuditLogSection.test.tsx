@@ -70,14 +70,17 @@ const AUDIT = `/launch/${LAUNCH_ID}/audit`;
 describe('AuditLogSection', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('shows a Load button and fetches nothing until clicked', () => {
-    const fetchMock = mockFetch();
+  it('fetches on mount (no manual load) and shows a Refresh control', async () => {
+    const fetchMock = mockFetch([
+      { method: 'GET', match: '/audit/pubkey', body: {} },
+      { method: 'GET', match: AUDIT, body: { entries: [] } },
+    ]);
     renderWithClient(<AuditLogSection launchId={LAUNCH_ID} />);
-    expect(screen.getByRole('button', { name: 'Load Audit Log' })).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument();
   });
 
-  it('loads entries and the server pubkey on click', async () => {
+  it('loads entries and the server pubkey on mount', async () => {
     mockFetch([
       { method: 'GET', match: '/audit/pubkey', body: { public_key: 'auditpubkey123' } },
       {
@@ -87,10 +90,6 @@ describe('AuditLogSection', () => {
       },
     ]);
     renderWithClient(<AuditLogSection launchId={LAUNCH_ID} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Load Audit Log' }));
-    });
 
     await waitFor(() => expect(screen.getByText('LaunchCreated')).toBeInTheDocument());
     expect(screen.getByText('Server audit pubkey')).toBeInTheDocument();
@@ -103,10 +102,6 @@ describe('AuditLogSection', () => {
       { method: 'GET', match: AUDIT, body: { entries: [] } },
     ]);
     renderWithClient(<AuditLogSection launchId={LAUNCH_ID} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Load Audit Log' }));
-    });
     await waitFor(() => expect(screen.getByText(/No audit entries yet/)).toBeInTheDocument());
   });
 
@@ -116,10 +111,6 @@ describe('AuditLogSection', () => {
       { method: 'GET', match: AUDIT, status: 500, body: envelope('boom') },
     ]);
     renderWithClient(<AuditLogSection launchId={LAUNCH_ID} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Load Audit Log' }));
-    });
     await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
   });
 
@@ -133,11 +124,23 @@ describe('AuditLogSection', () => {
       },
     ]);
     renderWithClient(<AuditLogSection launchId={LAUNCH_ID} />);
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Load Audit Log' }));
-    });
     await waitFor(() => expect(screen.getByText('CommitteeSet')).toBeInTheDocument());
     expect(screen.queryByText('Server audit pubkey')).not.toBeInTheDocument();
+  });
+
+  it('re-fetches when Refresh is clicked', async () => {
+    const fetchMock = mockFetch([
+      { method: 'GET', match: '/audit/pubkey', body: {} },
+      { method: 'GET', match: AUDIT, body: { entries: [] } },
+    ]);
+    renderWithClient(<AuditLogSection launchId={LAUNCH_ID} />);
+    await waitFor(() => expect(screen.getByText(/No audit entries yet/)).toBeInTheDocument());
+
+    const auditCalls = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes(AUDIT)).length;
+    const before = auditCalls();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+    });
+    await waitFor(() => expect(auditCalls()).toBeGreaterThan(before));
   });
 });
