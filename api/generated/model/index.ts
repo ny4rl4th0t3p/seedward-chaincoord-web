@@ -66,6 +66,8 @@ export * from './apiTokenResponse';
 export * from './apiValidatorReadinessJSON';
 export * from './getAdminCoordinatorsParams';
 export * from './getLaunchesParams';
+export * from './getLaunchIdGenesisParams';
+export * from './getLaunchIdGenesisType';
 export * from './getLaunchIdJoinParams';
 export * from './getLaunchIdJoinStatus';
 export * from './getLaunchIdPeersFormat';

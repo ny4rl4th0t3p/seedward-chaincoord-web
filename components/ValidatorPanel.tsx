@@ -14,6 +14,7 @@ import {
   useGetLaunchIdPeers,
 } from '@/api/generated/readiness/readiness';
 import { authedFetch } from '@/api/authedFetch';
+import { computeSha256Hex } from '@/utils/sha256';
 import { sameAccount } from '@/utils/address';
 import type {
   ServicesSubmitInput,
@@ -25,13 +26,6 @@ import type {
 } from '@/api/generated/model';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function computeSha256Hex(buffer: ArrayBuffer): Promise<string> {
-  const hash = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
 
 // ── Sub-panel UI primitives ───────────────────────────────────────────────────
 

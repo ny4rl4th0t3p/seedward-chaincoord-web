@@ -7,6 +7,7 @@ import { ValidatorPanel } from '@/components/ValidatorPanel';
 import { CommitteePanel } from '@/components/CommitteePanel';
 import { RehearsalResetButton } from '@/components/RehearsalResetButton';
 import { AuditLogSection } from '@/components/AuditLogSection';
+import { GenesisCard } from '@/components/GenesisCard';
 import { useAddChainToWallet } from '@/hooks';
 import { useAuth } from '@/contexts';
 import { ChainHint } from '@/utils/chainSuggestion';
@@ -271,6 +272,13 @@ function AuthenticatedLaunchDetail({ launchId }: { launchId: string }) {
           <InfoRow label="Final genesis SHA-256" value={launch.final_genesis_sha256} mono />
         )}
       </InfoCard>
+
+      {/* ── Genesis downloads (any member) ── */}
+      <GenesisCard
+        launchId={launchId}
+        initialSha256={launch.initial_genesis_sha256}
+        finalSha256={launch.final_genesis_sha256}
+      />
 
       {/* ── Committee card ── */}
       <InfoCard title={`Committee (${committee.threshold_m}/${committee.total_n})`}>

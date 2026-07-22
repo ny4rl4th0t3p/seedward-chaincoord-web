@@ -24,6 +24,7 @@ import type {
   ApiErrorEnvelope,
   ApiGenesisHashResponse,
   ApiGenesisUploadResponse,
+  GetLaunchIdGenesisParams,
   PostLaunchIdGenesisParams
 } from '../model';
 
@@ -49,21 +50,34 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getGetLaunchIdGenesisUrl = (id: string,) => {
+export const getGetLaunchIdGenesisUrl = (id: string,
+    params?: GetLaunchIdGenesisParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/launch/${id}/genesis`
+  return stringifiedParams.length > 0 ? `/launch/${id}/genesis?${stringifiedParams}` : `/launch/${id}/genesis`
 }
 
 /**
  * Returns 302 redirect (attestor mode) or streams raw genesis JSON (host mode).
+ * ?type=initial|final selects which stored genesis to serve. The initial stays
+ * downloadable after the final is published, so committee members can still
+ * reproduce the final from its inputs. Omit type for the current genesis
+ * (final once published, else initial).
  * @summary Download genesis file
  */
-export const getLaunchIdGenesis = async (id: string, options?: RequestInit): Promise<string> => {
+export const getLaunchIdGenesis = async (id: string,
+    params?: GetLaunchIdGenesisParams, options?: RequestInit): Promise<string> => {
 
-  return authFetchMutator<string>(getGetLaunchIdGenesisUrl(id),
+  return authFetchMutator<string>(getGetLaunchIdGenesisUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -76,23 +90,25 @@ export const getLaunchIdGenesis = async (id: string, options?: RequestInit): Pro
 
 
 
-export const getGetLaunchIdGenesisQueryKey = (id: string,) => {
+export const getGetLaunchIdGenesisQueryKey = (id: string,
+    params?: GetLaunchIdGenesisParams,) => {
     return [
-    `/launch/${id}/genesis`
+    `/launch/${id}/genesis`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetLaunchIdGenesisQueryOptions = <TData = Awaited<ReturnType<typeof getLaunchIdGenesis>>, TError = string | ApiErrorEnvelope>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdGenesis>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+export const getGetLaunchIdGenesisQueryOptions = <TData = Awaited<ReturnType<typeof getLaunchIdGenesis>>, TError = string | ApiErrorEnvelope>(id: string,
+    params?: GetLaunchIdGenesisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdGenesis>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetLaunchIdGenesisQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetLaunchIdGenesisQueryKey(id,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLaunchIdGenesis>>> = ({ signal }) => getLaunchIdGenesis(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLaunchIdGenesis>>> = ({ signal }) => getLaunchIdGenesis(id,params, { signal, ...requestOptions });
 
 
 
@@ -110,11 +126,12 @@ export type GetLaunchIdGenesisQueryError = string | ApiErrorEnvelope
  */
 
 export function useGetLaunchIdGenesis<TData = Awaited<ReturnType<typeof getLaunchIdGenesis>>, TError = string | ApiErrorEnvelope>(
- id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdGenesis>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
+ id: string,
+    params?: GetLaunchIdGenesisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLaunchIdGenesis>>, TError, TData>, request?: SecondParameter<typeof authFetchMutator>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetLaunchIdGenesisQueryOptions(id,options)
+  const queryOptions = getGetLaunchIdGenesisQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
