@@ -261,6 +261,15 @@ describe('ValidatorPanel — JoinSection (H.3 / H.4)', () => {
     mockSignedResult();
   });
 
+  it('hides the join form when the window is not open', () => {
+    mockFetch();
+    renderWithClient(
+      <ValidatorPanel {...defaultProps()} launch={makeLaunch({ status: 'WINDOW_CLOSED' })} />,
+    );
+    expect(screen.queryByRole('button', { name: /Submit Join Request/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/application window is not open/i)).toBeInTheDocument();
+  });
+
   it('submit shows error for missing peer address', async () => {
     mockFetch();
     renderWithClient(<ValidatorPanel {...defaultProps()} />);

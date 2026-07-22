@@ -23,7 +23,11 @@ const queryClient = new QueryClient({
     queries: {
       retry: 2,
       refetchOnMount: false,
-      refetchOnWindowFocus: false,
+      // Revalidate on tab focus so a session revoked/expired server-side is detected on return: the
+      // refetch 401s → the mutator dispatches coord:unauthorized → AuthProvider logs out → AuthWall.
+      // Without this a stale-but-cached view lingers until the next manual action ("go to sign-in
+      // from anywhere"). Also keeps launch state fresh when switching back to the tab.
+      refetchOnWindowFocus: true,
     },
   },
 });

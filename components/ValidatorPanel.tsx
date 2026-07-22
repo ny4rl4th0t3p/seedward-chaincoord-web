@@ -129,10 +129,11 @@ interface JoinSectionProps {
   wallet: StatefulWallet;
   signingChainId: string;
   isApproved: boolean;
+  windowOpen: boolean;
   params: GentxParams;
 }
 
-function JoinSection({ launchId, hint, address, wallet, signingChainId, isApproved, params }: JoinSectionProps) {
+function JoinSection({ launchId, hint, address, wallet, signingChainId, isApproved, windowOpen, params }: JoinSectionProps) {
   // Form fields — all hooks must come before any conditional returns
   const [gentxRaw, setGentxRaw] = useState('');
   const [peerAddress, setPeerAddress] = useState('');
@@ -218,6 +219,18 @@ function JoinSection({ launchId, hint, address, wallet, signingChainId, isApprov
         </Text>
         <Text fontSize="$xs" color="$textSecondary">
           Polling every 15 s — refresh this page to check again if you reopen the browser.
+        </Text>
+      </PanelCard>
+    );
+  }
+
+  // The application window must be open to submit a join request. Outside WINDOW_OPEN, don't render
+  // the form — a submit would just 409 server-side, and showing it invites a dead-end action.
+  if (!windowOpen) {
+    return (
+      <PanelCard title="Join Request">
+        <Text fontSize="$sm" color="$textSecondary">
+          The application window is not open, so new join requests can&apos;t be submitted.
         </Text>
       </PanelCard>
     );
@@ -721,6 +734,7 @@ export function ValidatorPanel({
         wallet={wallet}
         signingChainId={signingChainId}
         isApproved={isApproved}
+        windowOpen={launch.status === 'WINDOW_OPEN'}
         params={params}
       />
 

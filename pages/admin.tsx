@@ -174,7 +174,7 @@ function CoordinatorAllowlistSection() {
     try {
       await addCoordinator.mutateAsync({ data: { address: addr } });
       setNewAddress('');
-      refetch();
+      await refetch(); // await so the row appears without a manual reload (refetchOnMount is off)
     } catch (err) {
       const env = err as ApiErrorEnvelope;
       setAddError(env.error?.message ?? (err instanceof Error ? err.message : String(err)));
@@ -195,7 +195,7 @@ function CoordinatorAllowlistSection() {
         return;
       }
     }
-    refetch();
+    await refetch();
     setRemovingAddr(null);
   }
 
